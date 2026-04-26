@@ -1,0 +1,29 @@
+RewriteEngine On
+Options -Indexes
+
+# Clean public course URLs.
+RewriteRule ^course/([a-z0-9-]+)/([0-9]+)-[a-z0-9-]+/?$ course.php?slug=$1&chapter_id=$2 [NC,L,QSA]
+RewriteRule ^course/([a-z0-9-]+)/?$ course.php?slug=$1 [NC,L,QSA]
+RewriteRule ^profile/([a-f0-9]{32,64})/?$ public_profile.php?token=$1 [NC,L,QSA]
+
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}\.php -f
+RewriteRule ^(.*)$ $1.php [NC,L]
+
+# Make sitemap.php accessible via sitemap.xml
+RewriteRule ^sitemap\.xml$ sitemap.php [L]
+RewriteRule ^feed\.xml$ feed.php [L]
+RewriteRule ^opensearch\.xml$ opensearch.xml.php [L]
+
+# Never execute uploaded files as PHP.
+<IfModule mod_rewrite.c>
+RewriteRule ^assets/uploads/.*\.(php|phtml|phar|php[0-9]?)$ - [F,L,NC]
+</IfModule>
+
+<IfModule mod_headers.c>
+Header always set X-Content-Type-Options "nosniff"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+SetEnvIfNoCase Request_URI "^.*/assets/uploads/" no_index_upload=1
+Header set X-Robots-Tag "noindex, nofollow, noimageindex" env=no_index_upload
+</IfModule>

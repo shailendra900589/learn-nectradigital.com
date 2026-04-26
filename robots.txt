@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /includes/
+Disallow: /assets/uploads/
+
+Sitemap: https://learn.nectradigital.com/sitemap.xml
+Sitemap: https://learn.nectradigital.com/feed.xml
