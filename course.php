@@ -39,6 +39,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             ON DUPLICATE KEY UPDATE quiz_score = VALUES(quiz_score), quiz_passed = VALUES(quiz_passed)
         ");
         $stmt->execute([$student_id, $chapter_id, $course_id, $bestScore !== false ? $bestScore : null, $bestScore !== false && (float)$bestScore >= 70 ? 1 : 0]);
+        $stmtCourseTitle = $pdo->prepare("SELECT title FROM courses WHERE id = :id LIMIT 1");
+        $stmtCourseTitle->execute(['id' => $course_id]);
+        $courseTitle = (string)($stmtCourseTitle->fetchColumn() ?: 'your course');
+        create_notification(
+            $pdo,
+            (int)$student_id,
+            'Lesson completed',
+            'Great work! You marked a lesson as complete in ' . $courseTitle . '.',
+            'progress',
+            site_base_url() . 'student'
+        );
         json_response(['status' => 'success']);
     } catch(PDOException $e) {
         json_response(['status' => 'error', 'message' => 'Database error.'], 500);
@@ -112,6 +123,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
             ON DUPLICATE KEY UPDATE quiz_score = GREATEST(COALESCE(quiz_score, 0), VALUES(quiz_score)), quiz_passed = 1
         ");
         $stmtProgress->execute(['student_id' => $student_id, 'chapter_id' => $chapter_id, 'course_id' => $course_id, 'score' => $score]);
+
+        $suggested = recommended_courses_for_student($pdo, $student_id, 1);
+        $suggested = $suggested[0] ?? null;
+
+        create_notification(
+            $pdo,
+            $student_id,
+            'Quiz passed',
+            'You passed this chapter quiz with ' . round((float)$score, 2) . '%. Keep going!',
+            'progress',
+            site_base_url() . 'student'
+        );
+
+        if ($suggested) {
+            create_notification(
+                $pdo,
+                $student_id,
+                'Recommended next tutorial',
+                'Based on your progress, try ' . (string)$suggested['title'] . ' next. ' . (string)($suggested['recommendation_reason'] ?? ''),
+                'recommendation',
+                site_base_url() . course_path((string)$suggested['slug'])
+            );
+        }
     }
 
     json_response([
@@ -129,7 +163,7 @@ if (isset($_GET['ajax_chapter_id'])) {
     $chapter_id = get_int('ajax_chapter_id');
     $course_id = get_int('course_id');
     
-    $stmt = $pdo->prepare("SELECT * FROM chapters WHERE id = :id AND course_id = :course_id");
+    $stmt = $pdo->prepare("SELECT * FROM chapters WHERE id = :id AND course_id = :course_id AND editorial_status = 'published'");
     $stmt->execute(['id' => $chapter_id, 'course_id' => $course_id]);
     $chapter = $stmt->fetch();
     
@@ -157,13 +191,11 @@ if (isset($_GET['ajax_chapter_id'])) {
         // Inject content-only ads if active. Side/top/bottom ad surfaces are intentionally disabled.
         $contentAds = [];
         if (should_show_ads($pdo)) {
-            $locations = array_keys(content_ad_locations());
-            $placeholders = implode(',', array_fill(0, count($locations), '?'));
-            $stmtAds = $pdo->prepare("SELECT location, ad_code FROM ads WHERE location IN ($placeholders) AND is_active = 1 ORDER BY RAND()");
-            $stmtAds->execute($locations);
-            foreach ($stmtAds->fetchAll() as $ad) {
-                $contentAds[$ad['location']][] = $ad['ad_code'];
+            $paragraphCount = 0;
+            if (preg_match_all('/<\/p>/i', $content, $matches)) {
+                $paragraphCount = count($matches[0]);
             }
+            $contentAds = select_content_ads($pdo, $paragraphCount);
         }
 
         $renderAdGroup = function (array $adCodes, string $label): string {
@@ -322,6 +354,7 @@ $stmtChapters = $pdo->prepare("
     SELECT MIN(id) AS id, chapter_name, order_index
     FROM chapters
     WHERE course_id = :course_id
+      AND editorial_status = 'published'
     GROUP BY order_index, chapter_name
     ORDER BY order_index ASC, id ASC
 ");
@@ -334,7 +367,7 @@ $requested_chapter_id = isset($_GET['chapter_id']) ? (int)$_GET['chapter_id'] : 
 $active_chapter_id = in_array($requested_chapter_id, $chapter_ids, true) ? $requested_chapter_id : ($chapters[0]['id'] ?? 0);
 $active_chapter = null;
 if ($active_chapter_id) {
-    $stmtActive = $pdo->prepare("SELECT chapter_name, content FROM chapters WHERE id = :id AND course_id = :course_id");
+    $stmtActive = $pdo->prepare("SELECT chapter_name, content FROM chapters WHERE id = :id AND course_id = :course_id AND editorial_status = 'published'");
     $stmtActive->execute(['id' => $active_chapter_id, 'course_id' => $course['id']]);
     $active_chapter = $stmtActive->fetch();
 }
@@ -379,6 +412,7 @@ $seo_title = $active_chapter ? $active_chapter['chapter_name'] : $course['title'
 $seo_description = $active_chapter ? seo_excerpt($active_chapter['content'], 120) : seo_excerpt($course['description'], 120);
 $seo_canonical = absolute_url($active_chapter ? chapter_path($course['slug'], $active_chapter_id, $active_chapter['chapter_name']) : course_path($course['slug']));
 $seo_type = 'article';
+$seo_keywords = strtolower($course['title']) . ', tutorial, coding lesson, developer training';
 $seo_schema = [
     [
         '@context' => 'https://schema.org',
@@ -412,6 +446,29 @@ if ($active_chapter) {
         'mainEntityOfPage' => $seo_canonical,
     ];
 }
+
+$seo_schema[] = [
+    '@context' => 'https://schema.org',
+    '@type' => 'FAQPage',
+    'mainEntity' => [
+        [
+            '@type' => 'Question',
+            'name' => 'Is this tutorial beginner friendly?',
+            'acceptedAnswer' => [
+                '@type' => 'Answer',
+                'text' => 'Yes, this course starts with basics and gradually moves to advanced concepts.',
+            ],
+        ],
+        [
+            '@type' => 'Question',
+            'name' => 'How do I track my progress?',
+            'acceptedAnswer' => [
+                '@type' => 'Answer',
+                'text' => 'Log in as a student and mark lessons complete to automatically track progress in your panel.',
+            ],
+        ],
+    ],
+];
 
 // Dynamic Stats for "Pro" feel
 $enrolled_count = 1200 + ($course['id'] * 45); 

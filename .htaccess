@@ -13,6 +13,8 @@ RewriteRule ^(.*)$ $1.php [NC,L]
 # Make sitemap.php accessible via sitemap.xml
 RewriteRule ^sitemap\.xml$ sitemap.php [L]
 RewriteRule ^feed\.xml$ feed.php [L]
+RewriteRule ^google-feed\.xml$ google_feed.php [L]
+RewriteRule ^recommendations-feed\.json$ recommendations_feed.php [L]
 RewriteRule ^opensearch\.xml$ opensearch.xml.php [L]
 
 # Never execute uploaded files as PHP.

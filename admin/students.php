@@ -2,6 +2,7 @@
 require_once '../includes/db.php';
 require_once 'ui.php';
 require_admin();
+require_admin_role($pdo, ['owner']);
 
 $error = '';
 $success = '';
@@ -160,6 +161,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'Payment updated.';
         }
     }
+
+    if ($action === 'save_admin_user') {
+        $userId = post_int('user_id');
+        $username = trim($_POST['username'] ?? '');
+        $displayName = substr(trim($_POST['display_name'] ?? $username), 0, 120);
+        $role = in_array(($_POST['role'] ?? 'editor'), ['owner', 'editor', 'reviewer'], true) ? $_POST['role'] : 'editor';
+        $isActive = isset($_POST['is_active']) ? 1 : 0;
+        $password = $_POST['password'] ?? '';
+
+        if (!preg_match('/^[a-zA-Z0-9_.-]{3,40}$/', $username)) {
+            $error = 'Admin username must be 3-40 safe characters.';
+        } else {
+            try {
+                if ($userId > 0) {
+                    if ($userId === (int)($_SESSION['admin_id'] ?? 0) && $isActive === 0) {
+                        $error = 'You cannot deactivate your own admin account.';
+                    }
+                    $ownerCount = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'owner' AND is_active = 1")->fetchColumn();
+                    $stmtCurrentRole = $pdo->prepare("SELECT role FROM users WHERE id = :id LIMIT 1");
+                    $stmtCurrentRole->execute(['id' => $userId]);
+                    $currentRole = (string)($stmtCurrentRole->fetchColumn() ?: 'editor');
+                    if ($error === '' && $currentRole === 'owner' && $role !== 'owner' && $ownerCount <= 1) {
+                        $error = 'At least one active owner is required.';
+                    }
+                    if ($error === '' && $currentRole === 'owner' && $isActive === 0 && $ownerCount <= 1) {
+                        $error = 'At least one active owner is required.';
+                    }
+
+                    $params = [
+                        'id' => $userId,
+                        'username' => $username,
+                        'display_name' => $displayName ?: $username,
+                        'role' => $role,
+                        'is_active' => $isActive,
+                    ];
+                    $passwordSql = '';
+                    if ($password !== '') {
+                        if (strlen($password) < 10) {
+                            $error = 'New admin password must be at least 10 characters.';
+                        } else {
+                            $passwordSql = ', password = :password';
+                            $params['password'] = password_hash($password, PASSWORD_DEFAULT);
+                        }
+                    }
+                    if ($error === '') {
+                        $stmt = $pdo->prepare("
+                            UPDATE users
+                            SET username = :username,
+                                display_name = :display_name,
+                                role = :role,
+                                is_active = :is_active
+                                {$passwordSql}
+                            WHERE id = :id
+                        ");
+                        $stmt->execute($params);
+                        $success = 'Admin user updated.';
+                    }
+                } else {
+                    if (strlen($password) < 10) {
+                        $error = 'Admin password must be at least 10 characters.';
+                    } else {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO users (username, display_name, password, role, is_active)
+                            VALUES (:username, :display_name, :password, :role, :is_active)
+                        ");
+                        $stmt->execute([
+                            'username' => $username,
+                            'display_name' => $displayName ?: $username,
+                            'password' => password_hash($password, PASSWORD_DEFAULT),
+                            'role' => $role,
+                            'is_active' => $isActive,
+                        ]);
+                        $success = 'Admin user created.';
+                    }
+                }
+            } catch (PDOException $e) {
+                $error = 'Admin user could not be saved. Username may already exist.';
+            }
+        }
+    }
 }
 
 $editPlan = null;
@@ -193,6 +274,7 @@ $payments = $pdo->query("
     LIMIT 80
 ")->fetchAll();
 $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.00', 'currency' => 'INR', 'duration_days' => 30, 'description' => '', 'features' => '', 'ad_free' => 1, 'priority_support' => 0, 'downloadable_resources' => 0, 'certificate_access' => 0, 'is_active' => 1];
+$adminUsers = $pdo->query("SELECT id, username, display_name, role, is_active FROM users ORDER BY FIELD(role,'owner','editor','reviewer'), id ASC")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -259,6 +341,63 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                     </div>
                     <button class="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-lg">Save Plan</button>
                 </form>
+            </section>
+
+            <section class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 bg-slate-50 border-b border-gray-200">
+                    <h3 class="font-black text-slate-900">Admin Role Management</h3>
+                </div>
+                <div class="p-6 border-b border-slate-100">
+                    <form method="POST" action="students" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+                        <?php echo csrf_field(); ?>
+                        <input type="hidden" name="action" value="save_admin_user">
+                        <input type="hidden" name="user_id" value="0">
+                        <input name="username" placeholder="username" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" required>
+                        <input name="display_name" placeholder="display name" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <input name="password" type="password" placeholder="password (10+ chars)" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" required>
+                        <select name="role" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="editor">Editor</option>
+                            <option value="reviewer">Reviewer</option>
+                            <option value="owner">Owner</option>
+                        </select>
+                        <label class="flex items-center gap-2 text-sm font-bold"><input type="checkbox" name="is_active" checked> Active</label>
+                        <button class="bg-slate-900 hover:bg-blue-600 text-white font-bold px-4 py-2 rounded-lg text-sm">Create Admin</button>
+                    </form>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="text-xs uppercase text-slate-400 border-b border-gray-100"><tr><th class="p-4">Username</th><th class="p-4">Role</th><th class="p-4">Status</th><th class="p-4">Update</th></tr></thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <?php foreach($adminUsers as $adminUser): ?>
+                                <tr>
+                                    <form method="POST" action="students">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="action" value="save_admin_user">
+                                        <input type="hidden" name="user_id" value="<?php echo (int)$adminUser['id']; ?>">
+                                        <td class="p-4">
+                                            <input name="username" value="<?php echo h($adminUser['username']); ?>" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full">
+                                            <input name="display_name" value="<?php echo h($adminUser['display_name'] ?? ''); ?>" class="mt-2 border border-gray-300 rounded-lg px-3 py-2 text-sm w-full" placeholder="Display name">
+                                        </td>
+                                        <td class="p-4">
+                                            <select name="role" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                                <?php foreach(['owner','editor','reviewer'] as $role): ?>
+                                                    <option value="<?php echo h($role); ?>" <?php echo ($adminUser['role'] ?? 'editor') === $role ? 'selected' : ''; ?>><?php echo h(ucfirst($role)); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </td>
+                                        <td class="p-4">
+                                            <label class="flex items-center gap-2 text-sm font-bold"><input type="checkbox" name="is_active" <?php echo (int)($adminUser['is_active'] ?? 1) === 1 ? 'checked' : ''; ?>> Active</label>
+                                            <input name="password" type="password" class="mt-2 border border-gray-300 rounded-lg px-3 py-2 text-xs w-full" placeholder="New password (optional)">
+                                        </td>
+                                        <td class="p-4">
+                                            <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg text-xs">Save Admin</button>
+                                        </td>
+                                    </form>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
             <section class="bg-white rounded-xl border border-gray-200 overflow-hidden">

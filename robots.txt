@@ -6,3 +6,5 @@ Disallow: /assets/uploads/
 
 Sitemap: https://learn.nectradigital.com/sitemap.xml
 Sitemap: https://learn.nectradigital.com/feed.xml
+Sitemap: https://learn.nectradigital.com/google-feed.xml
+Sitemap: https://learn.nectradigital.com/recommendations-feed.json

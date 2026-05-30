@@ -18,6 +18,22 @@ echo "    <changefreq>daily</changefreq>\n";
 echo "    <priority>1.0</priority>\n";
 echo "  </url>\n";
 
+// Add search and feed endpoints for discovery engines.
+$staticPaths = [
+    ['search', 'daily', '0.8'],
+    ['feed.xml', 'daily', '0.7'],
+    ['google-feed.xml', 'daily', '0.7'],
+    ['recommendations-feed.json', 'daily', '0.6'],
+    ['opensearch.xml', 'weekly', '0.5'],
+];
+foreach ($staticPaths as [$path, $changefreq, $priority]) {
+    echo "  <url>\n";
+    echo "    <loc>" . htmlspecialchars($base_url . ltrim($path, '/'), ENT_XML1, 'UTF-8') . "</loc>\n";
+    echo "    <changefreq>{$changefreq}</changefreq>\n";
+    echo "    <priority>{$priority}</priority>\n";
+    echo "  </url>\n";
+}
+
 // 2. Fetch all Courses dynamically
 $stmt = $pdo->query("SELECT id, slug, created_at FROM courses ORDER BY id DESC");
 $courses = $stmt->fetchAll();
@@ -34,7 +50,7 @@ foreach ($courses as $course) {
     echo "    <priority>0.8</priority>\n";
     echo "  </url>\n";
 
-    $stmtChapters = $pdo->prepare("SELECT id, chapter_name FROM chapters WHERE course_id = :course_id ORDER BY order_index ASC");
+    $stmtChapters = $pdo->prepare("SELECT id, chapter_name FROM chapters WHERE course_id = :course_id AND editorial_status = 'published' ORDER BY order_index ASC");
     $stmtChapters->execute(['course_id' => $course['id']]);
     foreach ($stmtChapters->fetchAll() as $chapter) {
         echo "  <url>\n";

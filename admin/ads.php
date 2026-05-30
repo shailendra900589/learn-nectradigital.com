@@ -2,6 +2,7 @@
 require_once '../includes/db.php';
 require_once 'ui.php';
 require_admin();
+require_admin_role($pdo, ['owner', 'editor']);
 
 $error = '';
 $success = '';
@@ -96,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && ($_POST['action'] ?? '') === 'save_a
 }
 
 // --- 3. PREPARE EDIT DATA ---
-$edit_data = ['id'=>'','ad_name'=>'','ad_type'=>'google','ad_code'=>'','location'=>'inline_mid','is_active'=>1];
+$edit_data = ['id'=>'','ad_name'=>'','ad_type'=>'google','ad_code'=>'','location'=>'auto_smart','is_active'=>1];
 if (isset($_GET['edit'])) {
     $stmt = $pdo->prepare("SELECT * FROM ads WHERE id = :id");
     $stmt->execute(['id' => $_GET['edit']]);
@@ -196,7 +197,7 @@ $contentAdLocations = content_ad_locations();
                         </div>
 
                         <div class="mb-4 rounded-lg bg-amber-50 border border-amber-100 text-amber-800 p-3 text-xs font-bold leading-5">
-                            Side ads are disabled. All ad types render only inside lesson text/content areas.
+                            Side ads are disabled. Use <strong>Auto smart placement</strong> to let the system rotate ads across multiple lesson slots for non-premium users and improve fill rate.
                         </div>
 
                         <div id="code_block" class="mb-4">

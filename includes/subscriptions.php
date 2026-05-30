@@ -107,6 +107,7 @@ function ensure_subscription_schema(PDO $pdo): void
             $pdo->exec("
                 ALTER TABLE ads
                 MODIFY location ENUM(
+                    'auto_smart',
                     'inline_after_first',
                     'inline_mid',
                     'inline_before_summary',
@@ -335,6 +336,7 @@ function plan_features(?string $features): array
 function content_ad_locations(): array
 {
     return [
+        'auto_smart' => 'Auto smart placement (system chooses best slot)',
         'inline_after_first' => 'Inline after first paragraph',
         'inline_mid' => 'Inline middle paragraph',
         'inline_before_summary' => 'Before lesson summary',
@@ -346,6 +348,126 @@ function content_ad_locations(): array
         'quiz_prompt' => 'Quiz prompt sponsor',
         'bottom_recommendation' => 'Bottom recommendation',
     ];
+}
+
+function recommended_ad_slot_limits(int $paragraphCount): array
+{
+    if ($paragraphCount <= 3) {
+        return [
+            'inline_after_first' => 1,
+            'inline_mid' => 1,
+            'bottom_recommendation' => 1,
+        ];
+    }
+    if ($paragraphCount <= 7) {
+        return [
+            'inline_after_first' => 1,
+            'text_link' => 1,
+            'inline_mid' => 1,
+            'cta_card' => 1,
+            'bottom_recommendation' => 1,
+        ];
+    }
+    return [
+        'inline_after_first' => 1,
+        'text_link' => 1,
+        'sponsored_note' => 1,
+        'resource_box' => 1,
+        'inline_mid' => 1,
+        'cta_card' => 1,
+        'code_break' => 1,
+        'quiz_prompt' => 1,
+        'inline_before_summary' => 1,
+        'bottom_recommendation' => 1,
+    ];
+}
+
+function select_content_ads(PDO $pdo, int $paragraphCount = 8): array
+{
+    $slotLimits = recommended_ad_slot_limits($paragraphCount);
+    $targetSlots = array_keys($slotLimits);
+    if (!$targetSlots) {
+        return [];
+    }
+
+    $allLocations = array_unique(array_merge($targetSlots, ['auto_smart']));
+    $placeholders = implode(',', array_fill(0, count($allLocations), '?'));
+    $stmt = $pdo->prepare("
+        SELECT id, ad_type, location, ad_code
+        FROM ads
+        WHERE is_active = 1
+          AND location IN ($placeholders)
+        ORDER BY RAND()
+    ");
+    $stmt->execute($allLocations);
+    $ads = $stmt->fetchAll() ?: [];
+    if (!$ads) {
+        return [];
+    }
+
+    $byLocation = [];
+    $autoPool = [];
+    foreach ($ads as $ad) {
+        $location = (string)($ad['location'] ?? '');
+        if ($location === 'auto_smart') {
+            $autoPool[] = $ad;
+            continue;
+        }
+        if (in_array($location, $targetSlots, true)) {
+            $byLocation[$location][] = $ad;
+        }
+    }
+
+    $usedIds = [];
+    $servedTypeCounts = ['google' => 0, 'custom' => 0];
+    $result = array_fill_keys($targetSlots, []);
+
+    $pickBest = function (array &$pool) use (&$usedIds, &$servedTypeCounts): ?array {
+        if (!$pool) {
+            return null;
+        }
+        usort($pool, function ($a, $b) use ($servedTypeCounts) {
+            $aType = (string)($a['ad_type'] ?? 'custom');
+            $bType = (string)($b['ad_type'] ?? 'custom');
+            $aScore = $servedTypeCounts[$aType] ?? 0;
+            $bScore = $servedTypeCounts[$bType] ?? 0;
+            if ($aScore === $bScore) return 0;
+            return $aScore <=> $bScore;
+        });
+
+        foreach ($pool as $idx => $candidate) {
+            $id = (int)$candidate['id'];
+            if (isset($usedIds[$id])) {
+                continue;
+            }
+            unset($pool[$idx]);
+            $pool = array_values($pool);
+            $usedIds[$id] = true;
+            $type = (string)($candidate['ad_type'] ?? 'custom');
+            $servedTypeCounts[$type] = ($servedTypeCounts[$type] ?? 0) + 1;
+            return $candidate;
+        }
+        return null;
+    };
+
+    foreach ($targetSlots as $slot) {
+        $limit = $slotLimits[$slot] ?? 1;
+        for ($i = 0; $i < $limit; $i++) {
+            $picked = null;
+            if (!empty($byLocation[$slot])) {
+                $picked = $pickBest($byLocation[$slot]);
+            }
+            if (!$picked && $autoPool) {
+                $picked = $pickBest($autoPool);
+            }
+            if (!$picked) {
+                break;
+            }
+            $result[$slot][] = (string)$picked['ad_code'];
+        }
+    }
+
+    return $result;
 }
 
 function parse_quiz_lines(string $lines): array

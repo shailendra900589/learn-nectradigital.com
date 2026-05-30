@@ -22,6 +22,16 @@ if ($query !== '' && strlen($query) <= 80) {
 $seo_title = $query ? 'Search: ' . $query : 'Search Tutorials';
 $seo_description = $query ? 'Find programming tutorials and courses related to ' . $query . '.' : 'Search programming tutorials, lessons, and courses.';
 $seo_canonical = site_base_url() . 'search' . ($query ? '?q=' . rawurlencode($query) : '');
+$seo_keywords = $query ? ($query . ', coding search, programming course search') : 'search tutorials, coding topics, learning search';
+$seo_schema = [
+    [
+        '@context' => 'https://schema.org',
+        '@type' => 'SearchResultsPage',
+        'name' => $seo_title,
+        'description' => $seo_description,
+        'url' => $seo_canonical,
+    ],
+];
 require_once 'includes/header.php';
 ?>
 

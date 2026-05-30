@@ -14,6 +14,7 @@ if (!$student) {
     session_destroy();
     redirect(app_path('login'));
 }
+$notificationPrefs = notification_preferences($pdo, $student_id);
 
 $error = '';
 $success = '';
@@ -35,6 +36,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $profilePublic = isset($_POST['profile_public']) ? 1 : 0;
     $publicEmail = isset($_POST['public_email']) ? 1 : 0;
     $publicPhone = isset($_POST['public_phone']) ? 1 : 0;
+    $notifInAppEnabled = isset($_POST['notif_inapp_enabled']) ? 1 : 0;
+    $notifEmailEnabled = isset($_POST['notif_email_enabled']) ? 1 : 0;
+    $notifTypeSystem = isset($_POST['notif_type_system']) ? 1 : 0;
+    $notifTypeProgress = isset($_POST['notif_type_progress']) ? 1 : 0;
+    $notifTypeRecommendation = isset($_POST['notif_type_recommendation']) ? 1 : 0;
+    $notifTypeBilling = isset($_POST['notif_type_billing']) ? 1 : 0;
+    $notifTypeSecurity = isset($_POST['notif_type_security']) ? 1 : 0;
+    $notifDigestFrequency = $_POST['notif_digest_frequency'] ?? 'off';
+    $notifDigestWeekday = (int)($_POST['notif_digest_weekday'] ?? 1);
 
     if ($name === '' || !$email) {
         $error = 'Name and a valid email are required.';
@@ -140,9 +150,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             WHERE id = :id
         ");
         $stmt->execute($params);
+        update_notification_preferences($pdo, $student_id, [
+            'notif_inapp_enabled' => $notifInAppEnabled,
+            'notif_email_enabled' => $notifEmailEnabled,
+            'notif_type_system' => $notifTypeSystem,
+            'notif_type_progress' => $notifTypeProgress,
+            'notif_type_recommendation' => $notifTypeRecommendation,
+            'notif_type_billing' => $notifTypeBilling,
+            'notif_type_security' => $notifTypeSecurity,
+            'notif_digest_frequency' => $notifDigestFrequency,
+            'notif_digest_weekday' => $notifDigestWeekday,
+        ]);
 
         $_SESSION['student_name'] = $name;
         $student = get_student_profile($pdo, $student_id);
+        $notificationPrefs = notification_preferences($pdo, $student_id);
         $success = 'Profile updated successfully.';
     }
 }
@@ -268,6 +290,65 @@ require_once 'includes/header.php';
                         <label class="flex items-center gap-3 rounded-lg bg-white border border-slate-200 p-3 font-bold text-sm text-slate-700">
                             <input type="checkbox" name="public_phone" class="w-5 h-5 text-blue-600 rounded" <?php echo (int)($student['public_phone'] ?? 0) === 1 ? 'checked' : ''; ?>>
                             Show phone publicly
+                        </label>
+                    </div>
+                </div>
+
+                <div class="rounded-xl border border-indigo-200 bg-indigo-50/50 p-5">
+                    <h3 class="text-lg font-black text-slate-900 mb-3">Notification Preferences</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <label class="flex items-center gap-3 rounded-lg bg-white border border-slate-200 p-3 font-bold text-sm text-slate-700">
+                            <input type="checkbox" name="notif_inapp_enabled" class="w-5 h-5 text-blue-600 rounded" <?php echo (int)($notificationPrefs['notif_inapp_enabled'] ?? 1) === 1 ? 'checked' : ''; ?>>
+                            Enable in-app notifications
+                        </label>
+                        <label class="flex items-center gap-3 rounded-lg bg-white border border-slate-200 p-3 font-bold text-sm text-slate-700">
+                            <input type="checkbox" name="notif_email_enabled" class="w-5 h-5 text-blue-600 rounded" <?php echo (int)($notificationPrefs['notif_email_enabled'] ?? 0) === 1 ? 'checked' : ''; ?>>
+                            Enable email notifications
+                        </label>
+                    </div>
+                    <p class="text-xs uppercase tracking-widest font-black text-slate-400 mb-3">Notification types</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label class="flex items-center gap-3 rounded-lg bg-white border border-slate-200 p-3 font-bold text-sm text-slate-700">
+                            <input type="checkbox" name="notif_type_system" class="w-5 h-5 text-blue-600 rounded" <?php echo (int)($notificationPrefs['notif_type_system'] ?? 1) === 1 ? 'checked' : ''; ?>>
+                            System updates
+                        </label>
+                        <label class="flex items-center gap-3 rounded-lg bg-white border border-slate-200 p-3 font-bold text-sm text-slate-700">
+                            <input type="checkbox" name="notif_type_progress" class="w-5 h-5 text-blue-600 rounded" <?php echo (int)($notificationPrefs['notif_type_progress'] ?? 1) === 1 ? 'checked' : ''; ?>>
+                            Progress updates
+                        </label>
+                        <label class="flex items-center gap-3 rounded-lg bg-white border border-slate-200 p-3 font-bold text-sm text-slate-700">
+                            <input type="checkbox" name="notif_type_recommendation" class="w-5 h-5 text-blue-600 rounded" <?php echo (int)($notificationPrefs['notif_type_recommendation'] ?? 1) === 1 ? 'checked' : ''; ?>>
+                            Course recommendations
+                        </label>
+                        <label class="flex items-center gap-3 rounded-lg bg-white border border-slate-200 p-3 font-bold text-sm text-slate-700">
+                            <input type="checkbox" name="notif_type_billing" class="w-5 h-5 text-blue-600 rounded" <?php echo (int)($notificationPrefs['notif_type_billing'] ?? 1) === 1 ? 'checked' : ''; ?>>
+                            Billing notices
+                        </label>
+                        <label class="flex items-center gap-3 rounded-lg bg-white border border-slate-200 p-3 font-bold text-sm text-slate-700 md:col-span-2">
+                            <input type="checkbox" name="notif_type_security" class="w-5 h-5 text-blue-600 rounded" <?php echo (int)($notificationPrefs['notif_type_security'] ?? 1) === 1 ? 'checked' : ''; ?>>
+                            Security alerts
+                        </label>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                        <label class="text-sm font-bold text-slate-700">
+                            Digest frequency
+                            <select name="notif_digest_frequency" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                                <option value="off" <?php echo ($notificationPrefs['notif_digest_frequency'] ?? 'off') === 'off' ? 'selected' : ''; ?>>Off</option>
+                                <option value="daily" <?php echo ($notificationPrefs['notif_digest_frequency'] ?? 'off') === 'daily' ? 'selected' : ''; ?>>Daily digest</option>
+                                <option value="weekly" <?php echo ($notificationPrefs['notif_digest_frequency'] ?? 'off') === 'weekly' ? 'selected' : ''; ?>>Weekly digest</option>
+                            </select>
+                        </label>
+                        <label class="text-sm font-bold text-slate-700">
+                            Weekly digest day
+                            <select name="notif_digest_weekday" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                                <?php
+                                $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                                $selectedDay = (int)($notificationPrefs['notif_digest_weekday'] ?? 1);
+                                foreach ($days as $dayIndex => $dayName):
+                                ?>
+                                    <option value="<?php echo $dayIndex; ?>" <?php echo $selectedDay === $dayIndex ? 'selected' : ''; ?>><?php echo h($dayName); ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </label>
                     </div>
                 </div>

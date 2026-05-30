@@ -13,9 +13,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     if ($admin_count === 0) {
         if (preg_match('/^[a-zA-Z0-9_.-]{3,40}$/', $username) && strlen($password) >= 10) {
-            $stmt = $pdo->prepare("INSERT INTO users (username, password) VALUES (:username, :password)");
+            $stmt = $pdo->prepare("INSERT INTO users (username, display_name, password, role, is_active) VALUES (:username, :display_name, :password, 'owner', 1)");
             $stmt->execute([
                 'username' => $username,
+                'display_name' => $username,
                 'password' => password_hash($password, PASSWORD_DEFAULT),
             ]);
             $success = "Administrator account created. Sign in with the credentials you just set.";
@@ -24,21 +25,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $error = "Choose a username with 3-40 safe characters and a password with at least 10 characters.";
         }
     } elseif (!empty($username) && !empty($password)) {
-        $stmt = $pdo->prepare("SELECT id, username, password FROM users WHERE username = :username");
+        $stmt = $pdo->prepare("SELECT id, username, display_name, role, is_active, password FROM users WHERE username = :username");
         $stmt->execute(['username' => $username]);
         $user = $stmt->fetch();
 
-        if ($user && password_verify($password, $user['password'])) {
+        if ($user && (int)($user['is_active'] ?? 1) === 1 && password_verify($password, $user['password'])) {
             session_regenerate_id(true);
             $_SESSION['admin_logged_in'] = true;
             $_SESSION['admin_id'] = $user['id'];
             $_SESSION['admin_username'] = $user['username'];
+            $_SESSION['admin_display_name'] = $user['display_name'] ?: $user['username'];
+            $_SESSION['admin_role'] = in_array($user['role'] ?? '', ['owner', 'editor', 'reviewer'], true) ? $user['role'] : 'owner';
             
             // Redirect to dashboard
             header("Location: index.php");
             exit;
         } else {
-            $error = "Invalid username or password.";
+            $error = "Invalid credentials or inactive account.";
         }
     } else {
         $error = "Please fill in all fields.";

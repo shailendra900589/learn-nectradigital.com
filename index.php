@@ -12,6 +12,16 @@ $stmt = $pdo->query("
 ");
 $courses = $stmt->fetchAll();
 
+$stmtRecommended = $pdo->query("
+    SELECT c.title, c.slug, c.description, COUNT(DISTINCT sp.id) AS popularity
+    FROM courses c
+    LEFT JOIN student_progress sp ON sp.course_id = c.id
+    GROUP BY c.id
+    ORDER BY popularity DESC, c.created_at DESC
+    LIMIT 6
+");
+$recommended_courses = $stmtRecommended->fetchAll();
+
 // 2. Homepage ad surfaces are disabled. Ads now render only inside lesson content/text.
 $topAd = '';
 $bottomAd = '';
@@ -19,6 +29,7 @@ $bottomAd = '';
 // 3. Set Auto-SEO Variables for this specific page
 $seo_title = "Free Coding Tutorials";
 $seo_description = "Browse programming courses with clear lessons, examples, search, and progress tracking.";
+$seo_keywords = "coding tutorials, php course, javascript tutorials, programming roadmap, web development courses";
 
 // 4. Load the Reusable Header
 require_once 'includes/header.php';
@@ -81,6 +92,43 @@ require_once 'includes/header.php';
             <p class="text-sm text-slate-500 leading-6">Search courses from the header and jump straight into the right tutorial.</p>
         </div>
     </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-14">
+        <div class="bg-white border border-indigo-100 rounded-xl p-6 learning-surface">
+            <p class="text-xs font-black tracking-widest uppercase text-indigo-500">Search Visibility</p>
+            <p class="mt-2 text-sm text-slate-600 leading-6">Feeds are now optimized for search crawlers and recommendation engines.</p>
+        </div>
+        <div class="bg-white border border-emerald-100 rounded-xl p-6 learning-surface">
+            <p class="text-xs font-black tracking-widest uppercase text-emerald-500">AEO/GEO Ready</p>
+            <p class="mt-2 text-sm text-slate-600 leading-6">Structured metadata improves answer-engine understanding and local relevance signals.</p>
+        </div>
+        <div class="bg-white border border-amber-100 rounded-xl p-6 learning-surface">
+            <p class="text-xs font-black tracking-widest uppercase text-amber-500">Auto Notifications</p>
+            <p class="mt-2 text-sm text-slate-600 leading-6">Users receive in-app progress and recommended-learning alerts in real time.</p>
+        </div>
+    </div>
+
+    <?php if(!empty($recommended_courses)): ?>
+        <section class="mb-16">
+            <div class="flex items-end justify-between mb-6">
+                <div>
+                    <h2 class="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Recommended For Search & Learners</h2>
+                    <p class="text-slate-500 mt-2 font-medium">Trending tutorials picked from live learner activity.</p>
+                </div>
+                <a href="recommendations-feed.json" class="hidden md:inline-flex bg-indigo-50 text-indigo-700 border border-indigo-100 text-sm font-bold px-4 py-2 rounded-lg">Open JSON Feed</a>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <?php foreach($recommended_courses as $rec): ?>
+                    <a href="<?php echo h(course_path($rec['slug'])); ?>" class="bg-white border border-slate-200 rounded-xl p-6 learning-surface hover:border-indigo-300 transition">
+                        <p class="text-[10px] uppercase tracking-widest font-black text-indigo-500 mb-2">Recommendation</p>
+                        <h3 class="text-xl font-black text-slate-900"><?php echo h($rec['title']); ?></h3>
+                        <p class="text-sm text-slate-500 mt-3 leading-6"><?php echo h(seo_excerpt($rec['description'], 120)); ?></p>
+                        <div class="mt-4 text-xs font-black text-indigo-700">Learner hits: <?php echo number_format((int)$rec['popularity']); ?></div>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        </section>
+    <?php endif; ?>
 
     <div id="courses" class="mb-16 scroll-mt-32">
         <div class="flex items-end justify-between mb-10">

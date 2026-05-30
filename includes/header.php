@@ -10,8 +10,17 @@ $seo_image = $seo_image ?? '';
 $seo_type = $seo_type ?? 'website';
 $seo_robots = $seo_robots ?? 'index, follow';
 $seo_schema = $seo_schema ?? [];
+$seo_keywords = $seo_keywords ?? 'programming tutorials, coding courses, web development, php tutorials, javascript lessons';
 $adsense_client_id = getenv('ADSENSE_CLIENT_ID') ?: '';
 $load_ads = isset($pdo) ? should_show_ads($pdo) : true;
+$geo_latitude = getenv('SITE_GEO_LAT') ?: '28.6139';
+$geo_longitude = getenv('SITE_GEO_LNG') ?: '77.2090';
+$geo_region = getenv('SITE_GEO_REGION') ?: 'IN-DL';
+$geo_place = getenv('SITE_GEO_PLACE') ?: 'India';
+$notificationCount = 0;
+if (isset($pdo) && !empty($_SESSION['student_logged_in'])) {
+    $notificationCount = unread_notifications_count($pdo, (int)$_SESSION['student_id']);
+}
 $default_schema = [
     '@context' => 'https://schema.org',
     '@type' => 'WebSite',
@@ -35,8 +44,19 @@ $seo_schema = array_merge([$default_schema], $seo_schema);
     <title><?php echo h($seo_title); ?></title>
     <meta name="description" content="<?php echo h($seo_description); ?>">
     <meta name="robots" content="<?php echo h($seo_robots); ?>">
+    <meta name="googlebot" content="max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+    <meta name="bingbot" content="max-snippet:-1, max-image-preview:large">
     <link rel="canonical" href="<?php echo h($seo_canonical); ?>">
+    <meta name="keywords" content="<?php echo h($seo_keywords); ?>">
+    <meta name="author" content="Learn.Nectra">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="geo.region" content="<?php echo h($geo_region); ?>">
+    <meta name="geo.placename" content="<?php echo h($geo_place); ?>">
+    <meta name="geo.position" content="<?php echo h($geo_latitude . ';' . $geo_longitude); ?>">
+    <meta name="ICBM" content="<?php echo h($geo_latitude . ', ' . $geo_longitude); ?>">
     <link rel="alternate" type="application/rss+xml" title="Learn.Nectra RSS Feed" href="<?php echo h(rtrim(site_base_url(), '/')); ?>/feed.xml">
+    <link rel="alternate" type="application/rss+xml" title="Learn.Nectra Google Feed" href="<?php echo h(rtrim(site_base_url(), '/')); ?>/google-feed.xml">
+    <link rel="alternate" type="application/feed+json" title="Learn.Nectra Recommendation Feed" href="<?php echo h(rtrim(site_base_url(), '/')); ?>/recommendations-feed.json">
     <link rel="search" type="application/opensearchdescription+xml" title="Learn.Nectra Search" href="<?php echo h(rtrim(site_base_url(), '/')); ?>/opensearch.xml">
     <meta property="og:title" content="<?php echo h($seo_title); ?>">
     <meta property="og:description" content="<?php echo h($seo_description); ?>">
@@ -101,6 +121,23 @@ $seo_schema = array_merge([$default_schema], $seo_schema);
                     <a href="contact" class="text-gray-600 hover:text-blue-600 font-bold transition">Contact</a>
                     
                     <?php if(isset($_SESSION['student_logged_in'])): ?>
+                        <div class="relative" id="notificationWrap">
+                            <button id="notificationBtn" class="relative flex items-center justify-center w-10 h-10 rounded-full border border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-100 transition" aria-label="Notifications" aria-expanded="false">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2.03 2.03 0 0118 14.17V11a6 6 0 10-12 0v3.17c0 .54-.21 1.06-.6 1.43L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                                <?php if ($notificationCount > 0): ?>
+                                    <span id="notificationBadge" class="notification-badge"><?php echo $notificationCount > 9 ? '9+' : (int)$notificationCount; ?></span>
+                                <?php endif; ?>
+                            </button>
+                            <div id="notificationPanel" class="hidden absolute right-0 mt-2 w-96 max-w-[85vw] bg-white rounded-2xl border border-slate-100 shadow-2xl overflow-hidden z-50">
+                                <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                                    <h3 class="text-sm font-black text-slate-900">Notifications</h3>
+                                    <button id="notificationMarkRead" class="text-xs font-bold text-blue-600 hover:underline">Mark all as read</button>
+                                </div>
+                                <div id="notificationList" class="max-h-96 overflow-y-auto">
+                                    <div class="px-4 py-6 text-sm text-slate-500">Loading notifications...</div>
+                                </div>
+                            </div>
+                        </div>
                         <div class="relative group">
                             <button class="flex items-center gap-2 text-slate-800 font-bold bg-white border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-full transition shadow-sm cursor-pointer">
                                 <span class="w-7 h-7 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full flex items-center justify-center text-xs shadow-inner">
@@ -157,6 +194,7 @@ $seo_schema = array_merge([$default_schema], $seo_schema);
                 <a href="search" class="block rounded-lg px-4 py-3 font-bold text-slate-700 hover:bg-slate-50">Search</a>
                 <a href="contact" class="block rounded-lg px-4 py-3 font-bold text-slate-700 hover:bg-slate-50">Contact</a>
                 <?php if(isset($_SESSION['student_logged_in'])): ?>
+                    <a href="student#notification-center" class="block rounded-lg px-4 py-3 font-bold text-slate-700 hover:bg-slate-50">Notifications</a>
                     <a href="student" class="block rounded-lg px-4 py-3 font-bold text-blue-700 bg-blue-50">My Learning Panel</a>
                     <a href="profile" class="block rounded-lg px-4 py-3 font-bold text-slate-700 hover:bg-slate-50">Profile & QR Card</a>
                     <a href="billing" class="block rounded-lg px-4 py-3 font-bold text-slate-700 hover:bg-slate-50">Plans & Payments</a>
@@ -178,6 +216,11 @@ $seo_schema = array_merge([$default_schema], $seo_schema);
             const mobileClose = document.getElementById('mobileMenuCloseButton');
             const mobileOpenIcon = document.getElementById('mobileMenuOpenIcon');
             const mobileCloseIcon = document.getElementById('mobileMenuCloseIcon');
+            const notificationBtn = document.getElementById('notificationBtn');
+            const notificationPanel = document.getElementById('notificationPanel');
+            const notificationList = document.getElementById('notificationList');
+            const notificationMarkRead = document.getElementById('notificationMarkRead');
+            const notificationBadge = document.getElementById('notificationBadge');
             let timeout = null;
 
             function setMobileMenu(open) {
@@ -193,6 +236,61 @@ $seo_schema = array_merge([$default_schema], $seo_schema);
             mobileToggle?.addEventListener('click', () => setMobileMenu(mobileMenu.classList.contains('translate-x-full')));
             mobileClose?.addEventListener('click', () => setMobileMenu(false));
             mobileBackdrop?.addEventListener('click', () => setMobileMenu(false));
+
+            const renderNotification = (item) => {
+                const typeClass = item.type === 'recommendation'
+                    ? 'text-indigo-700 bg-indigo-50 border-indigo-100'
+                    : (item.type === 'progress' ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-slate-700 bg-slate-50 border-slate-100');
+                const timeText = new Date(item.created_at.replace(' ', 'T') + 'Z').toLocaleString();
+                const rowClass = item.is_read == 1 ? 'bg-white' : 'bg-blue-50/40';
+                const linkStart = item.action_url ? `<a href="${item.action_url}" class="block p-4 hover:bg-slate-50 transition ${rowClass}">` : `<div class="p-4 ${rowClass}">`;
+                const linkEnd = item.action_url ? '</a>' : '</div>';
+                return `${linkStart}<div class="flex items-start justify-between gap-3"><div><p class="text-sm font-black text-slate-900">${item.title}</p><p class="text-xs text-slate-600 mt-1 leading-5">${item.message}</p><p class="text-[11px] text-slate-400 mt-2">${timeText}</p></div><span class="text-[10px] px-2 py-1 rounded-full border font-black uppercase ${typeClass}">${item.type}</span></div>${linkEnd}`;
+            };
+
+            const loadNotifications = () => {
+                if (!notificationList) return;
+                fetch('notifications_api?action=list')
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (data.status !== 'success') return;
+                        if (Array.isArray(data.items) && data.items.length > 0) {
+                            notificationList.innerHTML = data.items.map(renderNotification).join('');
+                        } else {
+                            notificationList.innerHTML = '<div class="px-4 py-8 text-sm text-slate-500 text-center">No notifications yet.</div>';
+                        }
+                        if (notificationBadge) {
+                            if (data.unread > 0) {
+                                notificationBadge.classList.remove('hidden');
+                                notificationBadge.textContent = data.unread > 9 ? '9+' : String(data.unread);
+                            } else {
+                                notificationBadge.classList.add('hidden');
+                            }
+                        }
+                    })
+                    .catch(() => {
+                        notificationList.innerHTML = '<div class="px-4 py-8 text-sm text-red-500 text-center">Could not load notifications.</div>';
+                    });
+            };
+
+            notificationBtn?.addEventListener('click', function() {
+                const open = notificationPanel && notificationPanel.classList.contains('hidden');
+                notificationPanel?.classList.toggle('hidden');
+                notificationBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (open) loadNotifications();
+            });
+
+            notificationMarkRead?.addEventListener('click', function() {
+                const body = new FormData();
+                body.append('action', 'mark_read');
+                body.append('csrf_token', '<?php echo h(csrf_token()); ?>');
+                fetch('notifications_api', {
+                    method: 'POST',
+                    body
+                })
+                    .then((response) => response.json())
+                    .then(() => loadNotifications());
+            });
 
             if(searchInput) {
                 searchInput.addEventListener('keyup', function(e) {
@@ -221,6 +319,10 @@ $seo_schema = array_merge([$default_schema], $seo_schema);
                 document.addEventListener('click', function(e) {
                     if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
                         searchResults.classList.add('hidden');
+                    }
+                    if (notificationPanel && notificationBtn && !notificationPanel.contains(e.target) && !notificationBtn.contains(e.target)) {
+                        notificationPanel.classList.add('hidden');
+                        notificationBtn.setAttribute('aria-expanded', 'false');
                     }
                 });
                 

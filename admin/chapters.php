@@ -2,6 +2,7 @@
 require_once '../includes/db.php';
 require_once 'ui.php';
 require_admin();
+require_admin_role($pdo, ['owner', 'editor', 'reviewer']);
 
 if (!isset($_GET['course_id'])) {
     header("Location: courses");
@@ -11,6 +12,9 @@ if (!isset($_GET['course_id'])) {
 $course_id = get_int('course_id');
 $error = '';
 $success = '';
+$adminRole = current_admin_role($pdo);
+$canEditContent = admin_can_edit_content($pdo);
+$canReviewContent = admin_can_review_content($pdo);
 
 // Fetch course details
 $stmtCourse = $pdo->prepare("SELECT title FROM courses WHERE id = :id");
@@ -20,11 +24,16 @@ if (!$course) die("Course not found.");
 
 // --- 1. HANDLE DELETE ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_chapter') {
+    if (!$canEditContent) {
+        $error = 'Reviewer role cannot delete chapters.';
+    }
     verify_csrf();
     $delete_id = post_int('chapter_id');
-    $stmt = $pdo->prepare("DELETE FROM chapters WHERE id = :id AND course_id = :course_id");
-    if ($stmt->execute(['id' => $delete_id, 'course_id' => $course_id])) {
-        $success = "Chapter deleted successfully!";
+    if ($error === '') {
+        $stmt = $pdo->prepare("DELETE FROM chapters WHERE id = :id AND course_id = :course_id");
+        if ($stmt->execute(['id' => $delete_id, 'course_id' => $course_id])) {
+            $success = "Chapter deleted successfully!";
+        }
     }
 }
 
@@ -42,6 +51,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && ($_POST['action'] ?? '') !== 'delete
     $quiz_json = $quiz ? json_encode($quiz) : null;
     $order_index = (int)$_POST['order_index'];
     $download_file = trim($_POST['existing_download_file'] ?? '');
+    $editorial_status = $_POST['editorial_status'] ?? 'draft';
+    $review_notes = substr(trim($_POST['review_notes'] ?? ''), 0, 2000);
+    if (!in_array($editorial_status, ['draft', 'in_review', 'published'], true)) {
+        $editorial_status = 'draft';
+    }
+
+    if ($adminRole === 'editor' && $editorial_status === 'published') {
+        $editorial_status = 'in_review';
+    }
+    if ($adminRole === 'reviewer' && !$chapter_id) {
+        $error = 'Reviewer role can only review existing chapters.';
+    }
 
     if (isset($_FILES['download_file']) && $_FILES['download_file']['error'] !== UPLOAD_ERR_NO_FILE) {
         if ($_FILES['download_file']['error'] !== UPLOAD_ERR_OK) {
@@ -69,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && ($_POST['action'] ?? '') !== 'delete
         }
     }
 
-    if ($error === '' && trim($_POST['quiz_lines'] ?? '') !== '' && count($quiz) < 10) {
+    if ($error === '' && $canEditContent && trim($_POST['quiz_lines'] ?? '') !== '' && count($quiz) < 10) {
         $error = "Add at least 10 valid quiz questions. Students will get 4 random questions per attempt.";
     }
 
@@ -97,6 +118,33 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && ($_POST['action'] ?? '') !== 'delete
     if ($error === '' && !empty($chapter_name) && !empty($content)) {
         try {
             if (!empty($chapter_id)) {
+                $stmtExisting = $pdo->prepare("SELECT * FROM chapters WHERE id = :id AND course_id = :course_id LIMIT 1");
+                $stmtExisting->execute(['id' => $chapter_id, 'course_id' => $course_id]);
+                $existingChapter = $stmtExisting->fetch();
+                if (!$existingChapter) {
+                    $error = "Chapter not found.";
+                }
+            }
+
+            if ($error === '' && !empty($chapter_id)) {
+                if (!$canEditContent && $canReviewContent) {
+                    $stmt = $pdo->prepare("
+                        UPDATE chapters
+                        SET editorial_status = :editorial_status,
+                            review_notes = :review_notes,
+                            reviewed_by_admin_id = :reviewed_by,
+                            reviewed_at = NOW(),
+                            published_at = CASE WHEN :editorial_status = 'published' THEN NOW() ELSE published_at END
+                        WHERE id = :id
+                    ");
+                    $stmt->execute([
+                        'editorial_status' => $editorial_status,
+                        'review_notes' => $review_notes,
+                        'reviewed_by' => (int)($_SESSION['admin_id'] ?? 0),
+                        'id' => $chapter_id,
+                    ]);
+                    $success = "Chapter review workflow updated.";
+                } else {
                 // UPDATE Existing Chapter
                 $stmt = $pdo->prepare("
                     UPDATE chapters
@@ -108,7 +156,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && ($_POST['action'] ?? '') !== 'delete
                         download_label = :download_label,
                         is_premium = :is_premium,
                         require_quiz_pass = :require_quiz_pass,
-                        order_index = :order
+                        order_index = :order,
+                        editorial_status = :editorial_status,
+                        review_notes = :review_notes,
+                        updated_by_admin_id = :updated_by,
+                        reviewed_by_admin_id = CASE WHEN :reviewed_now = 1 THEN :updated_by ELSE reviewed_by_admin_id END,
+                        reviewed_at = CASE WHEN :reviewed_now = 1 THEN NOW() ELSE reviewed_at END,
+                        published_at = CASE WHEN :editorial_status = 'published' THEN NOW() ELSE published_at END
                     WHERE id = :id
                 ");
                 $stmt->execute([
@@ -121,14 +175,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && ($_POST['action'] ?? '') !== 'delete
                     'is_premium' => $is_premium,
                     'require_quiz_pass' => $require_quiz_pass,
                     'order' => $order_index,
+                    'editorial_status' => $editorial_status,
+                    'review_notes' => $review_notes,
+                    'updated_by' => (int)($_SESSION['admin_id'] ?? 0),
+                    'reviewed_now' => $canReviewContent ? 1 : 0,
                     'id' => $chapter_id,
                 ]);
                 $success = "Chapter updated successfully!";
+                }
             } else {
+                if (!$canEditContent) {
+                    $error = "Reviewer role cannot create chapters.";
+                }
+            }
+
+            if ($error === '' && empty($chapter_id)) {
                 // INSERT New Chapter
                 $stmt = $pdo->prepare("
-                    INSERT INTO chapters (course_id, chapter_name, content, quiz_json, practice_content, download_file, download_label, is_premium, require_quiz_pass, order_index)
-                    VALUES (:course_id, :name, :content, :quiz_json, :practice_content, :download_file, :download_label, :is_premium, :require_quiz_pass, :order)
+                    INSERT INTO chapters (course_id, chapter_name, content, quiz_json, practice_content, download_file, download_label, is_premium, require_quiz_pass, order_index, editorial_status, review_notes, updated_by_admin_id)
+                    VALUES (:course_id, :name, :content, :quiz_json, :practice_content, :download_file, :download_label, :is_premium, :require_quiz_pass, :order, :editorial_status, :review_notes, :updated_by)
                 ");
                 $stmt->execute([
                     'course_id' => $course_id,
@@ -141,6 +206,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && ($_POST['action'] ?? '') !== 'delete
                     'is_premium' => $is_premium,
                     'require_quiz_pass' => $require_quiz_pass,
                     'order' => $order_index,
+                    'editorial_status' => $editorial_status,
+                    'review_notes' => $review_notes,
+                    'updated_by' => (int)($_SESSION['admin_id'] ?? 0),
                 ]);
                 $success = "Chapter added successfully!";
             }
@@ -163,6 +231,9 @@ $edit_download_file = '';
 $edit_download_label = '';
 $edit_is_premium = 0;
 $edit_require_quiz_pass = 1;
+$edit_editorial_status = 'draft';
+$edit_review_notes = '';
+$chapterToEdit = ['quiz_json' => null];
 
 if (isset($_GET['edit'])) {
     $stmtEdit = $pdo->prepare("SELECT * FROM chapters WHERE id = :id AND course_id = :course_id");
@@ -180,6 +251,8 @@ if (isset($_GET['edit'])) {
         $edit_download_label = $chapterToEdit['download_label'] ?? '';
         $edit_is_premium = (int)($chapterToEdit['is_premium'] ?? 0);
         $edit_require_quiz_pass = (int)($chapterToEdit['require_quiz_pass'] ?? 1);
+        $edit_editorial_status = (string)($chapterToEdit['editorial_status'] ?? 'draft');
+        $edit_review_notes = (string)($chapterToEdit['review_notes'] ?? '');
     }
 } else {
     // If not editing, auto-suggest the next order number
@@ -191,10 +264,15 @@ if (isset($_GET['edit'])) {
 
 // --- 4. FETCH ALL CHAPTERS FOR SIDEBAR ---
 $stmtChapters = $pdo->prepare("
-    SELECT MIN(id) AS id, chapter_name, order_index
+    SELECT id, chapter_name, order_index,
+           (quiz_json IS NOT NULL AND quiz_json != '') AS has_quiz,
+           (practice_content IS NOT NULL AND TRIM(practice_content) != '') AS has_practice,
+           (download_file IS NOT NULL AND TRIM(download_file) != '') AS has_download,
+           editorial_status,
+           is_premium,
+           LENGTH(content) AS content_size
     FROM chapters
     WHERE course_id = :course_id
-    GROUP BY order_index, chapter_name
     ORDER BY order_index ASC, id ASC
 ");
 $stmtChapters->execute(['course_id' => $course_id]);
@@ -234,6 +312,7 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
         .form-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14); }
         .quiz-card { border: 1px solid #dbe3ef; border-radius: 0.75rem; background: #f8fafc; padding: 1rem; }
         .quiz-card.is-empty { opacity: 0.72; }
+        .editor-metric { border: 1px solid #e2e8f0; border-radius: .75rem; padding: .75rem; background: #fff; }
     </style>
 </head>
 <body class="bg-slate-50 font-sans antialiased flex h-screen overflow-hidden text-slate-800">
@@ -265,6 +344,25 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
                 </div>
             <?php endif; ?>
 
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="editor-metric">
+                    <div class="text-xs font-black uppercase tracking-widest text-slate-400">Total Chapters</div>
+                    <div class="text-2xl font-black text-slate-900 mt-1"><?php echo number_format(count($chapters)); ?></div>
+                </div>
+                <div class="editor-metric">
+                    <div class="text-xs font-black uppercase tracking-widest text-slate-400">Quiz Coverage</div>
+                    <div class="text-2xl font-black text-blue-700 mt-1"><?php echo number_format(count(array_filter($chapters, fn($c) => (int)$c['has_quiz'] === 1))); ?></div>
+                </div>
+                <div class="editor-metric">
+                    <div class="text-xs font-black uppercase tracking-widest text-slate-400">Practice Coverage</div>
+                    <div class="text-2xl font-black text-emerald-700 mt-1"><?php echo number_format(count(array_filter($chapters, fn($c) => (int)$c['has_practice'] === 1))); ?></div>
+                </div>
+                <div class="editor-metric">
+                    <div class="text-xs font-black uppercase tracking-widest text-slate-400">Download Coverage</div>
+                    <div class="text-2xl font-black text-violet-700 mt-1"><?php echo number_format(count(array_filter($chapters, fn($c) => (int)$c['has_download'] === 1))); ?></div>
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
                 <div class="lg:col-span-2 admin-card p-8">
@@ -282,14 +380,39 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
                         <input type="hidden" name="action" value="save_chapter">
                         <input type="hidden" name="chapter_id" value="<?php echo (int)$edit_id; ?>">
                         
+                        <?php if(!$canEditContent && $canReviewContent): ?>
+                            <div class="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-800">
+                                Reviewer mode active: content fields are read-only. You can update workflow status and review notes.
+                            </div>
+                        <?php endif; ?>
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                             <div class="md:col-span-3">
                                 <label class="block text-gray-700 text-sm font-semibold mb-2">Chapter Title</label>
-                                <input type="text" name="chapter_name" value="<?php echo htmlspecialchars($edit_name); ?>" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow outline-none" placeholder="e.g. PHP Variables" required>
+                                <input type="text" name="chapter_name" value="<?php echo htmlspecialchars($edit_name); ?>" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow outline-none" placeholder="e.g. PHP Variables" <?php echo $canEditContent ? '' : 'readonly'; ?> required>
                             </div>
                             <div class="md:col-span-1">
                                 <label class="block text-gray-700 text-sm font-semibold mb-2">Position</label>
-                                <input type="number" name="order_index" value="<?php echo $edit_order; ?>" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow outline-none text-center" required>
+                                <input type="number" name="order_index" value="<?php echo $edit_order; ?>" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow outline-none text-center" <?php echo $canEditContent ? '' : 'readonly'; ?> required>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label class="block text-gray-700 text-sm font-semibold mb-2">Workflow Status</label>
+                                <select name="editorial_status" class="form-input">
+                                    <?php
+                                    $statusOptions = ['draft' => 'Draft', 'in_review' => 'In Review', 'published' => 'Published'];
+                                    foreach ($statusOptions as $statusKey => $statusLabel):
+                                        $disabled = ($adminRole === 'editor' && $statusKey === 'published') ? 'disabled' : '';
+                                    ?>
+                                        <option value="<?php echo h($statusKey); ?>" <?php echo $edit_editorial_status === $statusKey ? 'selected' : ''; ?> <?php echo $disabled; ?>><?php echo h($statusLabel); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <?php if($adminRole === 'editor'): ?><p class="text-xs text-amber-700 mt-1 font-bold">Editors can move chapters to In Review. Reviewers/Owners publish.</p><?php endif; ?>
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 text-sm font-semibold mb-2">Review Notes</label>
+                                <textarea name="review_notes" rows="3" class="form-input text-sm" placeholder="Reviewer comments, pending fixes, approval notes..."><?php echo h($edit_review_notes); ?></textarea>
                             </div>
                         </div>
 
@@ -299,8 +422,15 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
                                 <strong>Auto format tips:</strong> Use <code>## Heading</code>, <code>**bold text**</code>, numbered lines like <code>1. Point</code>, bullet lines like <code>* Point</code>, and <code>[IMAGE: describe image]</code>. The public chapter page will convert it into professional tutorial formatting automatically.
                             </div>
                             <textarea id="content" name="content"><?php echo htmlspecialchars($edit_content); ?></textarea>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+                                <div class="editor-metric"><div class="text-xs font-black text-slate-400 uppercase">Words</div><div id="metricWords" class="text-lg font-black text-slate-900 mt-1">0</div></div>
+                                <div class="editor-metric"><div class="text-xs font-black text-slate-400 uppercase">Characters</div><div id="metricChars" class="text-lg font-black text-slate-900 mt-1">0</div></div>
+                                <div class="editor-metric"><div class="text-xs font-black text-slate-400 uppercase">Headings</div><div id="metricHeadings" class="text-lg font-black text-blue-700 mt-1">0</div></div>
+                                <div class="editor-metric"><div class="text-xs font-black text-slate-400 uppercase">Read Time</div><div id="metricReadTime" class="text-lg font-black text-emerald-700 mt-1">0 min</div></div>
+                            </div>
                         </div>
 
+                        <?php if($canEditContent): ?>
                         <div class="mb-8 form-card p-5">
                             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
                                 <div>
@@ -312,7 +442,7 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
                                         <input type="checkbox" name="require_quiz_pass" <?php echo $edit_require_quiz_pass ? 'checked' : ''; ?>>
                                         Require pass
                                     </label>
-                                    <button type="button" id="addQuizQuestion" class="rounded-lg bg-slate-900 hover:bg-blue-600 text-white px-4 py-2 text-sm font-bold">Add Question</button>
+                                    <?php if($canEditContent): ?><button type="button" id="addQuizQuestion" class="rounded-lg bg-slate-900 hover:bg-blue-600 text-white px-4 py-2 text-sm font-bold">Add Question</button><?php endif; ?>
                                 </div>
                             </div>
                             <input type="hidden" name="quiz_lines" id="quizLines">
@@ -350,7 +480,9 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
                                 Valid questions need 1 question, 1 correct answer, and 3 wrong options. Minimum 10 valid questions.
                             </div>
                         </div>
+                        <?php endif; ?>
 
+                        <?php if($canEditContent): ?>
                         <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
                             <div class="form-card p-5 space-y-4">
                                 <h4 class="text-xl font-black text-slate-900">Premium Access</h4>
@@ -375,15 +507,29 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
                                 </div>
                             </div>
                         </div>
+                        <?php endif; ?>
 
+                        <?php if($canEditContent): ?>
                         <div class="mb-8 rounded-xl border border-gray-200 p-5">
                             <h4 class="font-black text-slate-900 mb-3">Practice Set</h4>
                             <textarea name="practice_content" rows="6" class="form-input text-sm" placeholder="Add practice tasks, exercises, project prompt, or homework for this chapter."><?php echo h($edit_practice_content); ?></textarea>
                         </div>
+                        <?php endif; ?>
+
+                        <div class="mb-8 rounded-xl border border-indigo-200 bg-indigo-50 p-5">
+                            <h4 class="font-black text-indigo-900 mb-3">Editor Assistant</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                <button type="button" id="insertTemplateOutline" class="text-left rounded-lg bg-white border border-indigo-100 px-3 py-2 font-bold text-indigo-700 hover:bg-indigo-100">Insert lesson outline template</button>
+                                <button type="button" id="insertTemplateCode" class="text-left rounded-lg bg-white border border-indigo-100 px-3 py-2 font-bold text-indigo-700 hover:bg-indigo-100">Insert code explanation template</button>
+                                <button type="button" id="insertTemplateImage" class="text-left rounded-lg bg-white border border-indigo-100 px-3 py-2 font-bold text-indigo-700 hover:bg-indigo-100">Insert image placeholder</button>
+                                <button type="button" id="clearLocalDraft" class="text-left rounded-lg bg-white border border-rose-100 px-3 py-2 font-bold text-rose-700 hover:bg-rose-100">Clear saved local draft</button>
+                            </div>
+                            <p id="draftState" class="text-xs font-bold text-indigo-700 mt-3">Draft sync: idle</p>
+                        </div>
 
                         <div class="flex items-center">
                             <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-md hover:shadow-lg transition-all focus:outline-none focus:ring-4 focus:ring-blue-300">
-                                <?php echo $edit_id ? 'Update Chapter Content' : 'Publish New Chapter'; ?>
+                                <?php echo !$canEditContent && $canReviewContent ? 'Update Review Status' : ($edit_id ? 'Update Chapter Content' : 'Publish New Chapter'); ?>
                             </button>
                         </div>
                     </form>
@@ -407,9 +553,20 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
                                                 <span class="flex-shrink-0 w-6 h-6 rounded-full <?php echo $is_editing ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'; ?> flex items-center justify-center text-xs font-bold mt-0.5">
                                                     <?php echo $chapter['order_index']; ?>
                                                 </span>
+                                                <div class="min-w-0">
                                                 <p class="text-sm font-medium text-slate-800 truncate" title="<?php echo htmlspecialchars($chapter['chapter_name']); ?>">
                                                     <?php echo htmlspecialchars($chapter['chapter_name']); ?>
                                                 </p>
+                                                <div class="mt-1 flex flex-wrap gap-1">
+                                                    <?php if ((int)$chapter['has_quiz'] === 1): ?><span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 font-black">Quiz</span><?php endif; ?>
+                                                    <?php if ((int)$chapter['has_practice'] === 1): ?><span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 font-black">Practice</span><?php endif; ?>
+                                                    <?php if ((int)$chapter['has_download'] === 1): ?><span class="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-100 font-black">Download</span><?php endif; ?>
+                                                    <?php if ((int)$chapter['is_premium'] === 1): ?><span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 font-black">Premium</span><?php endif; ?>
+                                                    <?php if (($chapter['editorial_status'] ?? 'draft') === 'draft'): ?><span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-50 text-slate-700 border border-slate-100 font-black">Draft</span><?php endif; ?>
+                                                    <?php if (($chapter['editorial_status'] ?? 'draft') === 'in_review'): ?><span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 font-black">In Review</span><?php endif; ?>
+                                                    <?php if (($chapter['editorial_status'] ?? 'draft') === 'published'): ?><span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 font-black">Published</span><?php endif; ?>
+                                                </div>
+                                                </div>
                                             </div>
                                             
                                             <div class="flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity">
@@ -459,11 +616,100 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
                 ['view', ['fullscreen', 'codeview', 'help']]
               ]
           });
+          const canEditContent = <?php echo $canEditContent ? 'true' : 'false'; ?>;
+          if (!canEditContent) {
+              $('#content').summernote('disable');
+          }
+
+          const chapterNameInput = document.querySelector('input[name="chapter_name"]');
+          const orderInput = document.querySelector('input[name="order_index"]');
+          const practiceInput = document.querySelector('textarea[name="practice_content"]');
+          const isPremiumInput = document.querySelector('input[name="is_premium"]');
+          const quizRequiredInput = document.querySelector('input[name="require_quiz_pass"]');
+          const draftState = document.getElementById('draftState');
+          const draftKey = `chapter-editor-draft-<?php echo (int)$course_id; ?>-<?php echo $edit_id ? (int)$edit_id : 'new'; ?>`;
+          let hasUnsavedChanges = false;
 
           const quizBuilder = document.getElementById('quizBuilder');
           const addQuizQuestion = document.getElementById('addQuizQuestion');
           const quizLines = document.getElementById('quizLines');
           const chapterForm = document.querySelector('form[action^="chapters"]');
+          const metricWords = document.getElementById('metricWords');
+          const metricChars = document.getElementById('metricChars');
+          const metricHeadings = document.getElementById('metricHeadings');
+          const metricReadTime = document.getElementById('metricReadTime');
+
+          function computeEditorMetrics() {
+              const html = $('#content').summernote('code') || '';
+              const text = $('<div>').html(html).text().replace(/\s+/g, ' ').trim();
+              const words = text ? text.split(' ').length : 0;
+              const chars = text.length;
+              const headings = (html.match(/<h[1-6][^>]*>/gi) || []).length;
+              metricWords.textContent = String(words);
+              metricChars.textContent = String(chars);
+              metricHeadings.textContent = String(headings);
+              metricReadTime.textContent = `${Math.max(1, Math.ceil(words / 180))} min`;
+          }
+
+          function serializeDraft() {
+              const quizCards = [];
+              quizBuilder.querySelectorAll('[data-quiz-card]').forEach((card) => {
+                  quizCards.push({
+                      question: card.querySelector('[data-quiz-question]')?.value || '',
+                      correct: card.querySelector('[data-quiz-correct]')?.value || '',
+                      wrong: Array.from(card.querySelectorAll('[data-quiz-wrong]')).map((i) => i.value || ''),
+                  });
+              });
+              return {
+                  chapter_name: chapterNameInput?.value || '',
+                  order_index: orderInput?.value || '',
+                  content: $('#content').summernote('code'),
+                  practice_content: practiceInput?.value || '',
+                  is_premium: !!isPremiumInput?.checked,
+                  require_quiz_pass: !!quizRequiredInput?.checked,
+                  quiz_cards: quizCards,
+                  saved_at: new Date().toISOString(),
+              };
+          }
+
+          function saveLocalDraft() {
+              try {
+                  localStorage.setItem(draftKey, JSON.stringify(serializeDraft()));
+                  draftState.textContent = `Draft sync: saved ${new Date().toLocaleTimeString()}`;
+              } catch (e) {
+                  draftState.textContent = 'Draft sync: failed';
+              }
+          }
+
+          function applyDraft(data) {
+              if (!data) return;
+              if (chapterNameInput) chapterNameInput.value = data.chapter_name || chapterNameInput.value;
+              if (orderInput) orderInput.value = data.order_index || orderInput.value;
+              if (practiceInput) practiceInput.value = data.practice_content || practiceInput.value;
+              if (isPremiumInput) isPremiumInput.checked = !!data.is_premium;
+              if (quizRequiredInput) quizRequiredInput.checked = !!data.require_quiz_pass;
+              if (data.content) $('#content').summernote('code', data.content);
+              if (Array.isArray(data.quiz_cards) && data.quiz_cards.length >= 10) {
+                  quizBuilder.innerHTML = '';
+                  data.quiz_cards.slice(0, 25).forEach((item) => {
+                      const card = createQuizCard();
+                      card.querySelector('[data-quiz-question]').value = item.question || '';
+                      card.querySelector('[data-quiz-correct]').value = item.correct || '';
+                      const wrongInputs = card.querySelectorAll('[data-quiz-wrong]');
+                      (item.wrong || []).slice(0, 3).forEach((value, idx) => {
+                          if (wrongInputs[idx]) wrongInputs[idx].value = value || '';
+                      });
+                      quizBuilder.appendChild(card);
+                  });
+              }
+              renumberQuizCards();
+              computeEditorMetrics();
+          }
+
+          function markUnsaved() {
+              hasUnsavedChanges = true;
+              draftState.textContent = 'Draft sync: unsaved changes';
+          }
 
           function renumberQuizCards() {
               quizBuilder.querySelectorAll('[data-quiz-card]').forEach((card, index) => {
@@ -525,6 +771,12 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
           });
 
           quizBuilder?.addEventListener('input', renumberQuizCards);
+          quizBuilder?.addEventListener('input', markUnsaved);
+          chapterNameInput?.addEventListener('input', markUnsaved);
+          orderInput?.addEventListener('input', markUnsaved);
+          practiceInput?.addEventListener('input', markUnsaved);
+          isPremiumInput?.addEventListener('change', markUnsaved);
+          quizRequiredInput?.addEventListener('change', markUnsaved);
 
           chapterForm?.addEventListener('submit', () => {
               const lines = [];
@@ -537,8 +789,55 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
                   }
               });
               quizLines.value = lines.join('\n');
+              hasUnsavedChanges = false;
+              localStorage.removeItem(draftKey);
           });
 
+          $('#content').on('summernote.change', function () {
+              markUnsaved();
+              computeEditorMetrics();
+          });
+
+          setInterval(() => {
+              if (hasUnsavedChanges) {
+                  saveLocalDraft();
+                  hasUnsavedChanges = false;
+              }
+          }, 15000);
+
+          window.addEventListener('beforeunload', function (event) {
+              if (!hasUnsavedChanges) return;
+              event.preventDefault();
+              event.returnValue = '';
+          });
+
+          const existingDraft = localStorage.getItem(draftKey);
+          if (existingDraft) {
+              try {
+                  const parsed = JSON.parse(existingDraft);
+                  if (confirm('A local draft was found for this chapter editor. Restore it?')) {
+                      applyDraft(parsed);
+                      draftState.textContent = `Draft sync: restored (${new Date(parsed.saved_at || Date.now()).toLocaleString()})`;
+                  }
+              } catch (e) {}
+          }
+
+          document.getElementById('clearLocalDraft')?.addEventListener('click', () => {
+              localStorage.removeItem(draftKey);
+              draftState.textContent = 'Draft sync: cleared';
+          });
+
+          document.getElementById('insertTemplateOutline')?.addEventListener('click', () => {
+              $('#content').summernote('pasteHTML', '<h3>## Learning Objective</h3><p>Explain what this lesson covers.</p><h3>## Concept Breakdown</h3><p>Step-by-step explanation.</p><h3>## Summary</h3><p>Quick recap points.</p>');
+          });
+          document.getElementById('insertTemplateCode')?.addEventListener('click', () => {
+              $('#content').summernote('pasteHTML', '<h3>## Code Example</h3><p>```language<br>// sample code<br>```</p><h3>## Explanation</h3><p>Explain line by line.</p>');
+          });
+          document.getElementById('insertTemplateImage')?.addEventListener('click', () => {
+              $('#content').summernote('pasteHTML', '<p>[IMAGE: Add screenshot explaining this section]</p>');
+          });
+
+          computeEditorMetrics();
           renumberQuizCards();
       });
     </script>

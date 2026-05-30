@@ -8,6 +8,8 @@ if (empty($_SESSION['student_logged_in'])) {
 
 $student_id = (int)$_SESSION['student_id'];
 $subscription = active_subscription($pdo, $student_id);
+maybe_emit_personalized_recommendation($pdo, $student_id);
+$personalized_recommendations = recommended_courses_for_student($pdo, $student_id, 6);
 
 $stmtCourses = $pdo->prepare("
     SELECT
@@ -39,12 +41,14 @@ foreach ($courses as $course) {
     }
 }
 $activity = student_activity_summary($pdo, $student_id);
+$notifications = recent_notifications($pdo, $student_id, 12);
 
 $seo_title = 'My Learning Panel';
 $seo_description = 'Track courses, completed lessons, and continue learning from your student dashboard.';
 $seo_canonical = site_base_url() . 'student';
 $seo_type = 'website';
 $seo_robots = 'noindex, nofollow';
+$seo_keywords = 'student dashboard, learning progress, course notifications';
 require_once 'includes/header.php';
 ?>
 
@@ -111,6 +115,68 @@ require_once 'includes/header.php';
             </div>
         </div>
     </div>
+
+    <div id="notification-center" class="bg-white rounded-xl border border-gray-200 learning-surface overflow-hidden mb-8 scroll-mt-28">
+        <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="text-xl font-black text-slate-900">Notification Center</h2>
+            <a href="recommendations-feed.json" class="text-sm font-bold text-indigo-600 hover:underline">Recommendation feed</a>
+        </div>
+        <div class="divide-y divide-gray-100">
+            <?php foreach($notifications as $notification): ?>
+                <article class="px-6 py-4 <?php echo (int)$notification['is_read'] === 1 ? 'bg-white' : 'bg-blue-50/40'; ?>">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-black text-slate-900"><?php echo h($notification['title']); ?></h3>
+                            <p class="text-sm text-slate-600 mt-1 leading-6"><?php echo h($notification['message']); ?></p>
+                            <p class="text-xs text-slate-400 mt-2"><?php echo h(date('d M Y, h:i A', strtotime((string)$notification['created_at']))); ?></p>
+                        </div>
+                        <span class="text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-full border <?php echo $notification['type'] === 'recommendation' ? 'text-indigo-700 bg-indigo-50 border-indigo-100' : ($notification['type'] === 'progress' ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-slate-700 bg-slate-50 border-slate-100'); ?>">
+                            <?php echo h($notification['type']); ?>
+                        </span>
+                    </div>
+                    <?php if (($notification['type'] ?? '') === 'recommendation' && !empty($notification['meta']['reason_details']) && is_array($notification['meta']['reason_details'])): ?>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <?php foreach (array_slice($notification['meta']['reason_details'], 0, 3) as $detail): ?>
+                                <span class="text-[11px] font-bold text-indigo-700 bg-white border border-indigo-100 rounded-md px-2 py-1"><?php echo h((string)$detail); ?></span>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($notification['action_url'])): ?>
+                        <a href="<?php echo h((string)$notification['action_url']); ?>" class="inline-flex mt-3 text-sm font-bold text-blue-600 hover:underline">Open recommendation</a>
+                    <?php endif; ?>
+                </article>
+            <?php endforeach; ?>
+            <?php if (empty($notifications)): ?>
+                <div class="px-6 py-10 text-sm text-slate-500 text-center">No notifications yet. Complete lessons to receive recommendations.</div>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <?php if(!empty($personalized_recommendations)): ?>
+        <div class="bg-white rounded-xl border border-gray-200 learning-surface overflow-hidden mb-8">
+            <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <h2 class="text-xl font-black text-slate-900">Personalized Recommendations</h2>
+                <a href="profile" class="text-sm font-bold text-blue-600 hover:underline">Tune notification preferences</a>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
+                <?php foreach($personalized_recommendations as $item): ?>
+                    <a href="<?php echo h(course_path((string)$item['slug'])); ?>" class="rounded-xl border border-indigo-100 bg-indigo-50/40 p-5 hover:border-indigo-300 transition">
+                        <p class="text-[10px] uppercase tracking-widest font-black text-indigo-500 mb-2">Recommended</p>
+                        <h3 class="text-lg font-black text-slate-900"><?php echo h((string)$item['title']); ?></h3>
+                        <p class="text-sm text-slate-600 mt-2 leading-6"><?php echo h((string)$item['recommendation_reason']); ?></p>
+                        <?php if (!empty($item['recommendation_reason_details']) && is_array($item['recommendation_reason_details'])): ?>
+                            <ul class="mt-3 space-y-1">
+                                <?php foreach(array_slice($item['recommendation_reason_details'], 0, 3) as $detail): ?>
+                                    <li class="text-xs text-indigo-700 font-bold bg-white border border-indigo-100 rounded-md px-2 py-1"><?php echo h((string)$detail); ?></li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+                        <div class="mt-3 text-xs font-black text-indigo-700">Score: <?php echo h((string)$item['recommendation_score']); ?></div>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <div class="bg-white rounded-xl border border-gray-200 learning-surface overflow-hidden">
         <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">

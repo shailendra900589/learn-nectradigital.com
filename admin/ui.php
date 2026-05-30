@@ -41,13 +41,35 @@ function admin_sidebar(PDO $pdo, string $active): string
 {
     $messageBadge = admin_unread_count($pdo);
     $paymentBadge = admin_pending_payment_count($pdo);
-    $user = h($_SESSION['admin_username'] ?? 'Admin');
+    $user = h($_SESSION['admin_display_name'] ?? ($_SESSION['admin_username'] ?? 'Admin'));
+    $role = current_admin_role($pdo);
+    $roleLabel = strtoupper($role);
 
     $dashboardIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 13h8V3H3v10zm10 8h8V3h-8v18zM3 21h8v-6H3v6z"></path></svg>';
     $coursesIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13M4.5 5.5c2.6 0 5.1.5 7.5 1.5 2.4-1 4.9-1.5 7.5-1.5v13c-2.6 0-5.1.5-7.5 1.5-2.4-1-4.9-1.5-7.5-1.5v-13z"></path></svg>';
     $studentsIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m0-4a4 4 0 100-8 4 4 0 000 8zm8 0a4 4 0 100-8 4 4 0 000 8z"></path></svg>';
     $adsIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h10"></path></svg>';
     $messagesIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>';
+    $reviewIcon = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+    $reviewBadge = 0;
+    try {
+        $reviewBadge = (int)$pdo->query("SELECT COUNT(*) FROM chapters WHERE editorial_status = 'in_review'")->fetchColumn();
+    } catch (Throwable $e) {
+        $reviewBadge = 0;
+    }
+
+    $usersLink = ($role === 'owner')
+        ? admin_nav_link('students', 'Users & Plans', $studentsIcon, $active, 'students', $paymentBadge)
+        : '';
+    $adsLink = ($role === 'owner' || $role === 'editor')
+        ? admin_nav_link('ads', 'Content Ads', $adsIcon, $active, 'ads')
+        : '';
+    $messagesLink = ($role === 'owner')
+        ? admin_nav_link('messages', 'Inbox', $messagesIcon, $active, 'messages', $messageBadge)
+        : '';
+    $reviewLink = in_array($role, ['owner', 'reviewer'], true)
+        ? admin_nav_link('review_queue', 'Review Queue', $reviewIcon, $active, 'review_queue', $reviewBadge)
+        : '';
 
     return '
     <aside class="w-72 bg-slate-950 text-white flex-shrink-0 flex flex-col border-r border-slate-800">
@@ -60,14 +82,16 @@ function admin_sidebar(PDO $pdo, string $active): string
         <nav class="flex-1 px-4 py-5 space-y-2 overflow-y-auto">
             ' . admin_nav_link('index', 'Dashboard', $dashboardIcon, $active, 'dashboard') . '
             ' . admin_nav_link('courses', 'Courses', $coursesIcon, $active, 'courses') . '
-            ' . admin_nav_link('students', 'Users & Plans', $studentsIcon, $active, 'students', $paymentBadge) . '
-            ' . admin_nav_link('ads', 'Content Ads', $adsIcon, $active, 'ads') . '
-            ' . admin_nav_link('messages', 'Inbox', $messagesIcon, $active, 'messages', $messageBadge) . '
+            ' . $reviewLink . '
+            ' . $usersLink . '
+            ' . $adsLink . '
+            ' . $messagesLink . '
         </nav>
         <div class="p-4 border-t border-slate-800">
             <div class="rounded-xl bg-slate-900 border border-slate-800 p-4 mb-3">
                 <div class="text-xs text-slate-400 font-bold uppercase tracking-widest">Signed in</div>
                 <div class="font-black text-white truncate mt-1">' . $user . '</div>
+                <div class="text-xs text-blue-300 font-black mt-1">' . $roleLabel . '</div>
             </div>
             <form method="POST" action="index">
                 ' . csrf_field() . '

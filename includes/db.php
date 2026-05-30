@@ -3,6 +3,10 @@ require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/content.php';
 require_once __DIR__ . '/profile_helpers.php';
 require_once __DIR__ . '/subscriptions.php';
+require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/recommendations.php';
+require_once __DIR__ . '/editorial_workflow.php';
+require_once __DIR__ . '/analytics.php';
 
 // Database configuration. Environment variables are preferred for production.
 $host = getenv('DB_HOST') ?: 'localhost';
@@ -22,4 +26,8 @@ try {
 }
 
 ensure_subscription_schema($pdo);
+ensure_notification_schema($pdo);
+ensure_editorial_workflow_schema($pdo);
+ensure_analytics_schema($pdo);
+track_lifetime_visitor($pdo);
 ?>

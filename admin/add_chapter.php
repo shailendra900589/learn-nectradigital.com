@@ -2,6 +2,7 @@
 require_once '../includes/db.php';
 require_once 'ui.php';
 require_admin();
+require_admin_role($pdo, ['owner', 'editor']);
 
 if (!isset($_GET['course_id'])) {
     header("Location: courses");

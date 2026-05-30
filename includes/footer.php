@@ -1,4 +1,5 @@
 </main> <footer class="bg-white text-slate-600 py-12 border-t border-blue-100 mt-auto">
+        <?php $visitorMetrics = isset($pdo) ? cached_visitor_metrics_summary($pdo, 60) : ['lifetime' => 0, 'today_unique' => 0, 'month_unique' => 0, 'live_online' => 0]; ?>
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
                 
@@ -13,6 +14,21 @@
                         <a href="#" aria-label="GitHub" class="text-slate-500 hover:text-slate-900 transition">
                             <svg class="h-6 w-6" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/></svg>
                         </a>
+                    </div>
+                    <div class="mt-5 flex flex-wrap gap-2">
+                        <span class="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-black text-blue-800">
+                            <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                            Lifetime: <span class="text-slate-900"><?php echo number_format((int)$visitorMetrics['lifetime']); ?></span>
+                        </span>
+                        <span class="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-800">
+                            Today unique: <span class="text-slate-900"><?php echo number_format((int)$visitorMetrics['today_unique']); ?></span>
+                        </span>
+                        <span class="inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50 px-4 py-2 text-xs font-black text-indigo-800">
+                            Month unique: <span class="text-slate-900"><?php echo number_format((int)$visitorMetrics['month_unique']); ?></span>
+                        </span>
+                        <span class="inline-flex items-center gap-2 rounded-full border border-amber-100 bg-amber-50 px-4 py-2 text-xs font-black text-amber-800">
+                            Live online: <span class="text-slate-900"><?php echo number_format((int)$visitorMetrics['live_online']); ?></span>
+                        </span>
                     </div>
                 </div>
                 
@@ -36,7 +52,7 @@
                 
             </div>
             
-            <div class="border-t border-blue-100 pt-8 flex flex-col md:flex-row justify-between items-center text-sm">
+            <div class="border-t border-blue-100 pt-8 flex flex-col md:flex-row justify-between items-center text-sm gap-2">
                 <p>&copy; <?php echo date('Y'); ?> Learn.Nectra. All rights reserved.</p>
                 <p class="mt-2 md:mt-0 text-slate-500 flex items-center gap-1">
                     Built with <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path></svg> for Learners

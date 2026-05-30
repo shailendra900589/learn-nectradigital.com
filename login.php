@@ -85,16 +85,32 @@ if ($google_enabled && isset($_GET['code'])) {
                 $_SESSION['student_logged_in'] = true;
                 $_SESSION['student_id'] = $student['id'];
                 $_SESSION['student_name'] = $student['name'];
+                create_notification(
+                    $pdo,
+                    (int)$student['id'],
+                    'New sign in detected',
+                    'Your account was signed in using Google.',
+                    'security',
+                    site_base_url() . 'student'
+                );
             } else {
                 // Create new account for Google User (Generate random password since they use Google)
                 $random_password = password_hash(bin2hex(random_bytes(10)), PASSWORD_DEFAULT);
                 $stmt = $pdo->prepare("INSERT INTO students (name, email, password, email_verified, email_verified_at) VALUES (:name, :email, :password, 1, NOW())");
                 $stmt->execute(['name' => $name, 'email' => $email, 'password' => $random_password]);
-                
+                $newStudentId = (int)$pdo->lastInsertId();
                 session_regenerate_id(true);
                 $_SESSION['student_logged_in'] = true;
-                $_SESSION['student_id'] = $pdo->lastInsertId();
+                $_SESSION['student_id'] = $newStudentId;
                 $_SESSION['student_name'] = $name;
+                create_notification(
+                    $pdo,
+                    $newStudentId,
+                    'Welcome to Learn.Nectra',
+                    'Your Google account has been connected successfully. Start with your first course now.',
+                    'system',
+                    site_base_url() . 'index#courses'
+                );
             }
             header('Location: ' . app_path('index'));
             exit;
@@ -135,6 +151,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['student_logged_in'] = true;
                 $_SESSION['student_id'] = $student['id'];
                 $_SESSION['student_name'] = $student['name'];
+                create_notification(
+                    $pdo,
+                    (int)$student['id'],
+                    'New sign in detected',
+                    'Your account was signed in with email and password.',
+                    'security',
+                    site_base_url() . 'student'
+                );
                 header('Location: ' . app_path('index'));
                 exit;
             }
