@@ -1,48 +1,44 @@
-</main> <footer class="bg-white text-slate-600 py-12 border-t border-blue-100 mt-auto">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-                
-                <div class="md:col-span-2">
-                    <div class="font-bold text-2xl text-slate-950 tracking-tight mb-4">Learn<span class="text-blue-600">.Nectra</span></div>
-                    <p class="text-sm leading-relaxed mb-6 max-w-md">Your ultimate destination for free, high-quality programming tutorials. Build your skills, track your progress, and advance your career today.</p>
-                    
-                    <div class="flex space-x-4">
-                        <a href="#" aria-label="Twitter" class="text-slate-500 hover:text-blue-600 transition">
-                            <svg class="h-6 w-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.84"/></svg>
-                        </a>
-                        <a href="#" aria-label="GitHub" class="text-slate-500 hover:text-slate-900 transition">
-                            <svg class="h-6 w-6" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/></svg>
-                        </a>
-                    </div>
-                </div>
-                
+    <?php
+    $publicPage = basename($_SERVER['SCRIPT_NAME'] ?? '', '.php');
+    if (isset($pdo) && in_array($publicPage, ['index', 'search', 'contact', 'privacy', 'terms'], true)) {
+        $publicAds = active_content_ad_groups($pdo)['sitewide'] ?? [];
+        if ($publicAds) {
+            echo '<section class="library-shell public-ad-strip" aria-label="Sponsored placements">'
+                . render_ad_group($publicAds, 'Public page sponsor') . '</section>';
+        }
+    }
+    ?>
+    </main>
+    <footer class="nectra-footer">
+        <div class="library-shell">
+            <div class="footer-layout">
                 <div>
-                    <h4 class="text-slate-950 font-bold mb-4 uppercase text-xs tracking-wider">Quick Navigation</h4>
-                    <ul class="space-y-3 text-sm">
-                        <li><a href="index" class="hover:text-blue-600 transition">Home</a></li>
-                        <li><a href="index#courses" class="hover:text-blue-600 transition">Browse Courses</a></li>
-                        <li><a href="login" class="hover:text-blue-600 transition">Student Login</a></li>
-                    </ul>
+                    <a href="<?php echo h(lang_href('index')); ?>" class="text-2xl font-bold text-white">Learn<span class="brand-accent">.Nectra</span></a>
+                    <p class="mt-2"><?php echo h(t('footer.tagline')); ?></p>
                 </div>
-                
-                <div>
-                    <h4 class="text-slate-950 font-bold mb-4 uppercase text-xs tracking-wider">Support</h4>
-                    <ul class="space-y-3 text-sm">
-                        <li><a href="contact" class="hover:text-blue-600 transition">Contact Us</a></li>
-                        <li><a href="privacy" class="hover:text-blue-600 transition">Privacy Policy</a></li>
-                        <li><a href="terms" class="hover:text-blue-600 transition">Terms of Service</a></li>
+                <nav aria-label="<?php echo h(t('footer.resources')); ?>">
+                    <h2><?php echo h(t('footer.learn')); ?></h2>
+                    <ul>
+                        <li><a href="<?php echo h(lang_href('index#courses')); ?>"><?php echo h(t('footer.library')); ?></a></li>
+                        <li><a href="<?php echo h(lang_href('search')); ?>"><?php echo h(t('footer.search')); ?></a></li>
+                        <li><a href="<?php echo h(lang_href(isset($_SESSION['student_logged_in']) ? 'student' : 'login')); ?>"><?php echo h(t('footer.my')); ?></a></li>
                     </ul>
-                </div>
-                
+                </nav>
+                <nav aria-label="<?php echo h(t('footer.policies')); ?>">
+                    <h2><?php echo h(t('footer.help')); ?></h2>
+                    <ul>
+                        <li><a href="<?php echo h(lang_href('contact')); ?>"><?php echo h(t('footer.contact')); ?></a></li>
+                        <li><a href="<?php echo h(lang_href('billing')); ?>"><?php echo h(t('footer.plans')); ?></a></li>
+                        <li><a href="<?php echo h(lang_href('privacy')); ?>"><?php echo h(t('footer.privacy')); ?></a></li>
+                        <li><a href="<?php echo h(lang_href('terms')); ?>"><?php echo h(t('footer.terms')); ?></a></li>
+                    </ul>
+                </nav>
             </div>
-            
-            <div class="border-t border-blue-100 pt-8 flex flex-col md:flex-row justify-between items-center text-sm">
-                <p>&copy; <?php echo date('Y'); ?> Learn.Nectra. All rights reserved.</p>
-                <p class="mt-2 md:mt-0 text-slate-500 flex items-center gap-1">
-                    Built with <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path></svg> for Learners
-                </p>
-            </div>
+            <p class="footer-legal">&copy; <?php echo date('Y'); ?> Learn.Nectra</p>
         </div>
     </footer>
+    <script src="<?php echo h(protected_asset_url('assets/js/tryit-runners.js')); ?>"></script>
+    <script src="<?php echo h(protected_asset_url('assets/js/tryit.js')); ?>"></script>
+    <script src="<?php echo h(protected_asset_url('assets/js/main.js')); ?>"></script>
 </body>
 </html>

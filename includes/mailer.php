@@ -8,7 +8,7 @@ function smtp_config(): array
         'host' => getenv('SMTP_HOST') ?: 'smtp.gmail.com',
         'port' => (int)(getenv('SMTP_PORT') ?: 587),
         'username' => getenv('SMTP_USER') ?: 'nectradigital3@gmail.com',
-        'password' => getenv('SMTP_PASS') ?: 'qdlyghucipqmmotp',
+        'password' => getenv('SMTP_PASS') ?: '',
         'from_email' => $fromEmail,
         'from_name' => getenv('SMTP_FROM_NAME') ?: 'Nectra Digital',
         'reply_to' => getenv('SMTP_REPLY_TO') ?: $fromEmail,
@@ -42,6 +42,10 @@ function smtp_command($socket, string $command, array $okCodes): string
 function send_smtp_mail(string $to, string $subject, string $html, string $text = ''): bool
 {
     $config = smtp_config();
+    if ($config['password'] === '') {
+        error_log('SMTP authentication is not configured.');
+        return false;
+    }
     $socket = @stream_socket_client(
         'tcp://' . $config['host'] . ':' . $config['port'],
         $errno,
@@ -110,8 +114,10 @@ function send_smtp_mail(string $to, string $subject, string $html, string $text 
 
 function is_local_request(): bool
 {
-    $host = $_SERVER['HTTP_HOST'] ?? '';
-    return str_contains($host, 'localhost') || str_contains($host, '127.0.0.1') || str_contains($host, '::1');
+    $host = strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
+    return in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)
+        && preg_match('/^(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]+)?$/', $host) === 1
+        && getenv('ALLOW_LOCAL_DEV_OTP') === '1';
 }
 
 function create_otp(PDO $pdo, string $email, string $purpose, ?int $studentId = null): string
@@ -173,12 +179,20 @@ function verify_otp(PDO $pdo, string $email, string $purpose, string $otp): arra
         return ['ok' => false, 'message' => 'Too many attempts. Please request a new code.'];
     }
 
-    $pdo->prepare("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id = :id")->execute(['id' => $row['id']]);
+    $attempt = $pdo->prepare("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id = :id AND attempts < 5 AND consumed_at IS NULL AND expires_at > NOW()");
+    $attempt->execute(['id' => $row['id']]);
+    if ($attempt->rowCount() !== 1) {
+        return ['ok' => false, 'message' => 'This code is no longer available. Please request a new code.'];
+    }
     if (!password_verify($otp, $row['otp_hash'])) {
         return ['ok' => false, 'message' => 'Invalid OTP. Please check the code.'];
     }
 
-    $pdo->prepare("UPDATE otp_verifications SET consumed_at = NOW() WHERE id = :id")->execute(['id' => $row['id']]);
+    $consume = $pdo->prepare("UPDATE otp_verifications SET consumed_at = NOW() WHERE id = :id AND consumed_at IS NULL AND expires_at > NOW()");
+    $consume->execute(['id' => $row['id']]);
+    if ($consume->rowCount() !== 1) {
+        return ['ok' => false, 'message' => 'This code is no longer available. Please request a new code.'];
+    }
     return ['ok' => true, 'row' => $row];
 }
 ?>

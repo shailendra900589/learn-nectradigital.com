@@ -1,0 +1,208 @@
+/* SEO course only. Loaded when body has seo-studio. */
+
+body.seo-studio {
+    background: #f3f7f6;
+}
+
+body.seo-studio .seo-hero {
+    background:
+        radial-gradient(900px 180px at 100% 0%, rgba(45, 212, 191, 0.28), transparent 60%),
+        linear-gradient(110deg, #134e4a 0%, #0f766e 48%, #0e7490 100%);
+    color: #f0fdfa;
+    padding: 28px 0 22px;
+}
+
+body.seo-studio .seo-kicker {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #ccfbf1;
+}
+
+body.seo-studio .seo-hero h1 {
+    margin: 0;
+    font-size: 34px;
+    line-height: 1.1;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.03em;
+}
+
+body.seo-studio .seo-hero p {
+    margin: 8px 0 0;
+    max-width: 640px;
+    color: #ccfbf1;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+body.seo-studio .seo-hero-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: flex-end;
+    justify-content: space-between;
+}
+
+body.seo-studio .seo-metrics {
+    display: flex;
+    gap: 8px;
+}
+
+body.seo-studio .seo-metrics div {
+    min-width: 92px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 14px;
+    padding: 10px 12px;
+}
+
+body.seo-studio .seo-metrics strong {
+    display: block;
+    font-size: 18px;
+    color: #fff;
+}
+
+body.seo-studio .seo-metrics span {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #ccfbf1;
+}
+
+body.seo-studio .seo-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+body.seo-studio .seo-pills span {
+    background: #fff;
+    color: #115e59;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+body.seo-studio > .bg-white.border-b {
+    background: #f0fdfa !important;
+    border-bottom-color: #99f6e4 !important;
+}
+
+body.seo-studio #chapter-sidebar {
+    border-color: #99f6e4;
+    background: #fff;
+}
+
+body.seo-studio #chapter-sidebar > div:first-child {
+    background: #f0fdfa !important;
+    border-bottom-color: #99f6e4 !important;
+}
+
+body.seo-studio .topic-section-header {
+    background: #f0fdfa !important;
+    color: #115e59 !important;
+    border-color: #99f6e4 !important;
+}
+
+body.seo-studio #chapter-list .chapter-btn.bg-emerald-50\/70,
+body.seo-studio #chapter-list .chapter-btn.bg-emerald-50,
+body.seo-studio #chapter-list .chapter-btn.border-emerald-600 {
+    background: #ccfbf1 !important;
+    color: #115e59 !important;
+    border-left-color: #0f766e !important;
+}
+
+body.seo-studio #chapter-list .chapter-number.bg-emerald-600 {
+    background: #0f766e !important;
+}
+
+body.seo-studio #tutorial-content {
+    background: #f8fffe !important;
+    border-color: #99f6e4 !important;
+    box-shadow: 0 16px 40px rgba(15, 118, 110, 0.06);
+}
+
+body.seo-studio #dynamic-area > div:first-child {
+    border-bottom-color: #99f6e4 !important;
+}
+
+body.seo-studio #top-loading-bar {
+    background: linear-gradient(90deg, #0f766e, #2dd4bf, #0f766e) !important;
+}
+
+body.seo-studio figure[data-nectra-figure="1"] {
+    border-color: #99f6e4 !important;
+    background: #fff !important;
+}
+
+body.dark-mode.seo-studio {
+    background: #0c1614 !important;
+    color: #ccfbf1 !important;
+}
+
+body.dark-mode.seo-studio #course-app button.bg-white,
+body.dark-mode.seo-studio #course-app button.bg-white span {
+    background: #f0fdfa !important;
+    color: #115e59 !important;
+    border-color: #99f6e4 !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area :is(h2, h3, h4, p, li, .text-slate-900, .text-slate-800, .text-slate-700, .text-slate-600, .text-slate-500):not(.nd-visual, .nd-visual *) {
+    color: #134e4a !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area :is(h2, h3):not(.nd-visual, .nd-visual *) {
+    color: #042f2e !important;
+}
+
+body.dark-mode.seo-studio #tutorial-content {
+    background: #f8fffe !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area .nd-visual {
+    background: #ffffff !important;
+    color: #0f172a !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area .nd-visual .nd-rail {
+    background: #111827 !important;
+    color: #e5e7eb !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area .nd-visual .nd-brand {
+    color: #5eead4 !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area .nd-visual .nd-muted {
+    color: #9ca3af !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area .nd-visual .nd-item {
+    color: #d1d5db !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area .nd-visual .nd-on {
+    background: #0f766e !important;
+    color: #ffffff !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area .nd-visual .nd-on-dark {
+    background: #111827 !important;
+    color: #e5e7eb !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area .nd-visual .nd-on-dark span {
+    color: #e5e7eb !important;
+}
+
+body.dark-mode.seo-studio #dynamic-area .nd-visual .nd-top,
+body.dark-mode.seo-studio #dynamic-area .nd-visual .nd-top span {
+    color: #115e59 !important;
+}

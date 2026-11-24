@@ -1,0 +1,214 @@
+/* Digital Marketing course only. Loaded when body has dm-studio. */
+
+body.dm-studio {
+    background: #f6f1ea;
+}
+
+body.dm-studio .dm-hero {
+    background:
+        radial-gradient(900px 180px at 100% 0%, rgba(251, 146, 60, 0.35), transparent 60%),
+        linear-gradient(110deg, #7c2d12 0%, #c2410c 48%, #ea580c 100%);
+    color: #fff7ed;
+    padding: 28px 0 22px;
+}
+
+body.dm-studio .dm-kicker {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #ffedd5;
+}
+
+body.dm-studio .dm-hero h1 {
+    margin: 0;
+    font-size: 34px;
+    line-height: 1.1;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.03em;
+}
+
+body.dm-studio .dm-hero p {
+    margin: 8px 0 0;
+    max-width: 640px;
+    color: #ffedd5;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+body.dm-studio .dm-hero-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: flex-end;
+    justify-content: space-between;
+}
+
+body.dm-studio .dm-metrics {
+    display: flex;
+    gap: 8px;
+}
+
+body.dm-studio .dm-metrics div {
+    min-width: 92px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 14px;
+    padding: 10px 12px;
+}
+
+body.dm-studio .dm-metrics strong {
+    display: block;
+    font-size: 18px;
+    color: #fff;
+}
+
+body.dm-studio .dm-metrics span {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #ffedd5;
+}
+
+body.dm-studio .dm-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+body.dm-studio .dm-pills span {
+    background: #fff;
+    color: #9a3412;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+body.dm-studio > .bg-white.border-b {
+    background: #fff7ed !important;
+    border-bottom-color: #fdba74 !important;
+}
+
+body.dm-studio #chapter-sidebar {
+    border-color: #fdba74;
+    background: #fff;
+}
+
+body.dm-studio #chapter-sidebar > div:first-child {
+    background: #fff7ed !important;
+    border-bottom-color: #fed7aa !important;
+}
+
+body.dm-studio .topic-section-header {
+    background: #fff7ed !important;
+    color: #9a3412 !important;
+    border-color: #fed7aa !important;
+}
+
+body.dm-studio #chapter-list .chapter-btn.bg-emerald-50\/70,
+body.dm-studio #chapter-list .chapter-btn.bg-emerald-50,
+body.dm-studio #chapter-list .chapter-btn.border-emerald-600 {
+    background: #ffedd5 !important;
+    color: #9a3412 !important;
+    border-left-color: #ea580c !important;
+}
+
+body.dm-studio #chapter-list .chapter-number.bg-emerald-600 {
+    background: #ea580c !important;
+}
+
+body.dm-studio #tutorial-content {
+    background: #fffdfb !important;
+    border-color: #fed7aa !important;
+    box-shadow: 0 16px 40px rgba(154, 52, 18, 0.06);
+}
+
+body.dm-studio #dynamic-area > div:first-child {
+    border-bottom-color: #fed7aa !important;
+}
+
+body.dm-studio #top-loading-bar {
+    background: linear-gradient(90deg, #ea580c, #fb923c, #ea580c) !important;
+}
+
+body.dm-studio figure[data-nectra-figure="1"] {
+    border-color: #fed7aa !important;
+    background: #fff !important;
+}
+
+body.dark-mode.dm-studio {
+    background: #1c1410 !important;
+    color: #ffedd5 !important;
+}
+
+body.dark-mode.dm-studio #tutorial-content,
+body.dark-mode.dm-studio #chapter-sidebar,
+body.dark-mode.dm-studio .dm-hero {
+    color: inherit;
+}
+
+body.dark-mode.dm-studio #course-app button.bg-white,
+body.dark-mode.dm-studio #course-app button.bg-white span {
+    background: #fff7ed !important;
+    color: #9a3412 !important;
+    border-color: #fdba74 !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area :is(h2, h3, h4, p, li, .text-slate-900, .text-slate-800, .text-slate-700, .text-slate-600, .text-slate-500):not(.nd-visual, .nd-visual *) {
+    color: #44403c !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area :is(h2, h3):not(.nd-visual, .nd-visual *) {
+    color: #1c1917 !important;
+}
+
+body.dark-mode.dm-studio #tutorial-content {
+    background: #fffdfb !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area .nd-visual {
+    background: #ffffff !important;
+    color: #0f172a !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area .nd-visual .nd-rail {
+    background: #111827 !important;
+    color: #e5e7eb !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area .nd-visual .nd-brand {
+    color: #fb923c !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area .nd-visual .nd-muted {
+    color: #9ca3af !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area .nd-visual .nd-item {
+    color: #d1d5db !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area .nd-visual .nd-on {
+    background: #ea580c !important;
+    color: #ffffff !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area .nd-visual .nd-on-dark {
+    background: #111827 !important;
+    color: #e5e7eb !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area .nd-visual .nd-on-dark span {
+    color: #e5e7eb !important;
+}
+
+body.dark-mode.dm-studio #dynamic-area .nd-visual .nd-top,
+body.dark-mode.dm-studio #dynamic-area .nd-visual .nd-top span {
+    color: #9a3412 !important;
+}

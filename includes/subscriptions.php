@@ -104,25 +104,29 @@ function ensure_subscription_schema(PDO $pdo): void
 
     if ($tableExists('ads') && $columnExists('ads', 'location')) {
         try {
-            $pdo->exec("
-                ALTER TABLE ads
-                MODIFY location ENUM(
-                    'inline_after_first',
-                    'inline_mid',
-                    'inline_before_summary',
-                    'text_link',
-                    'sponsored_note',
-                    'resource_box',
-                    'cta_card',
-                    'code_break',
-                    'quiz_prompt',
-                    'bottom_recommendation',
-                    'inline',
-                    'top',
-                    'bottom',
-                    'sidebar'
-                ) NOT NULL DEFAULT 'inline_mid'
-            ");
+            $locationColumn = $pdo->query("SHOW COLUMNS FROM ads LIKE 'location'")->fetch();
+            if (!str_contains((string)($locationColumn['Type'] ?? ''), "'sitewide'")) {
+                $pdo->exec("
+                    ALTER TABLE ads
+                    MODIFY location ENUM(
+                        'inline_after_first',
+                        'inline_mid',
+                        'inline_before_summary',
+                        'text_link',
+                        'sponsored_note',
+                        'resource_box',
+                        'cta_card',
+                        'code_break',
+                        'quiz_prompt',
+                        'bottom_recommendation',
+                        'inline',
+                        'top',
+                        'bottom',
+                        'sidebar',
+                        'sitewide'
+                    ) NOT NULL DEFAULT 'inline_mid'
+                ");
+            }
             $pdo->exec("UPDATE ads SET location = 'inline_mid' WHERE location = 'sidebar'");
             $pdo->exec("UPDATE ads SET location = 'inline_after_first' WHERE location = 'inline'");
             $pdo->exec("UPDATE ads SET location = 'bottom_recommendation' WHERE location IN ('top', 'bottom')");
@@ -133,6 +137,7 @@ function ensure_subscription_schema(PDO $pdo): void
 
     if ($tableExists('chapters')) {
         $chapterColumns = [
+            'section_name' => "ALTER TABLE chapters ADD COLUMN section_name VARCHAR(120) NOT NULL DEFAULT 'Tutorial' AFTER chapter_name",
             'quiz_json' => "ALTER TABLE chapters ADD COLUMN quiz_json MEDIUMTEXT NULL AFTER content",
             'practice_content' => "ALTER TABLE chapters ADD COLUMN practice_content MEDIUMTEXT NULL AFTER quiz_json",
             'download_file' => "ALTER TABLE chapters ADD COLUMN download_file VARCHAR(255) NULL AFTER practice_content",
@@ -214,7 +219,7 @@ function ensure_subscription_schema(PDO $pdo): void
 
     $studentColumns = [
         'content_access' => "ALTER TABLE students ADD COLUMN content_access TINYINT(1) NOT NULL DEFAULT 1 AFTER password",
-        'profile_public' => "ALTER TABLE students ADD COLUMN profile_public TINYINT(1) NOT NULL DEFAULT 1 AFTER content_access",
+        'profile_public' => "ALTER TABLE students ADD COLUMN profile_public TINYINT(1) NOT NULL DEFAULT 0 AFTER content_access",
         'public_email' => "ALTER TABLE students ADD COLUMN public_email TINYINT(1) NOT NULL DEFAULT 0 AFTER profile_public",
         'public_phone' => "ALTER TABLE students ADD COLUMN public_phone TINYINT(1) NOT NULL DEFAULT 0 AFTER public_email",
         'hide_ads_override' => "ALTER TABLE students ADD COLUMN hide_ads_override TINYINT(1) NOT NULL DEFAULT 0 AFTER public_phone",
@@ -335,6 +340,7 @@ function plan_features(?string $features): array
 function content_ad_locations(): array
 {
     return [
+        'sitewide' => 'Public site + all chapters',
         'inline_after_first' => 'Inline after first paragraph',
         'inline_mid' => 'Inline middle paragraph',
         'inline_before_summary' => 'Before lesson summary',
@@ -395,6 +401,6 @@ function chapter_download_url(?string $path): string
     if ($path === '') {
         return '';
     }
-    return preg_match('#^assets/uploads/chapter-downloads/[A-Za-z0-9._-]+$#', $path) ? $path : '';
+    return preg_match('#^assets/uploads/chapter-downloads/[A-Za-z0-9._-]+$#', $path) ? protected_asset_url($path) : '';
 }
 ?>

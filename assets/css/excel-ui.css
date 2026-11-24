@@ -1,0 +1,208 @@
+/* Excel course only. Loaded when body has xl-studio. */
+
+body.xl-studio {
+    background: #f3f7f4;
+}
+
+body.xl-studio .xl-hero {
+    background:
+        radial-gradient(900px 180px at 100% 0%, rgba(134, 239, 172, 0.35), transparent 60%),
+        linear-gradient(110deg, #14532d 0%, #166534 48%, #107c41 100%);
+    color: #f0fdf4;
+    padding: 28px 0 22px;
+}
+
+body.xl-studio .xl-kicker {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #dcfce7;
+}
+
+body.xl-studio .xl-hero h1 {
+    margin: 0;
+    font-size: 34px;
+    line-height: 1.1;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.03em;
+}
+
+body.xl-studio .xl-hero p {
+    margin: 8px 0 0;
+    max-width: 640px;
+    color: #dcfce7;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+body.xl-studio .xl-hero-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: flex-end;
+    justify-content: space-between;
+}
+
+body.xl-studio .xl-metrics {
+    display: flex;
+    gap: 8px;
+}
+
+body.xl-studio .xl-metrics div {
+    min-width: 92px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 14px;
+    padding: 10px 12px;
+}
+
+body.xl-studio .xl-metrics strong {
+    display: block;
+    font-size: 18px;
+    color: #fff;
+}
+
+body.xl-studio .xl-metrics span {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #dcfce7;
+}
+
+body.xl-studio .xl-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+body.xl-studio .xl-pills span {
+    background: #fff;
+    color: #14532d;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+body.xl-studio > .bg-white.border-b {
+    background: #f0fdf4 !important;
+    border-bottom-color: #bbf7d0 !important;
+}
+
+body.xl-studio #chapter-sidebar {
+    border-color: #bbf7d0;
+    background: #fff;
+}
+
+body.xl-studio #chapter-sidebar > div:first-child {
+    background: #f0fdf4 !important;
+    border-bottom-color: #bbf7d0 !important;
+}
+
+body.xl-studio .topic-section-header {
+    background: #f0fdf4 !important;
+    color: #14532d !important;
+    border-color: #bbf7d0 !important;
+}
+
+body.xl-studio #chapter-list .chapter-btn.bg-emerald-50\/70,
+body.xl-studio #chapter-list .chapter-btn.bg-emerald-50,
+body.xl-studio #chapter-list .chapter-btn.border-emerald-600 {
+    background: #dcfce7 !important;
+    color: #14532d !important;
+    border-left-color: #107c41 !important;
+}
+
+body.xl-studio #chapter-list .chapter-number.bg-emerald-600 {
+    background: #107c41 !important;
+}
+
+body.xl-studio #tutorial-content {
+    background: #f8fdf9 !important;
+    border-color: #bbf7d0 !important;
+    box-shadow: 0 16px 40px rgba(16, 124, 65, 0.06);
+}
+
+body.xl-studio #dynamic-area > div:first-child {
+    border-bottom-color: #bbf7d0 !important;
+}
+
+body.xl-studio #top-loading-bar {
+    background: linear-gradient(90deg, #107c41, #4ade80, #107c41) !important;
+}
+
+body.xl-studio figure[data-nectra-figure="1"] {
+    border-color: #bbf7d0 !important;
+    background: #fff !important;
+}
+
+body.dark-mode.xl-studio {
+    background: #0c1610 !important;
+    color: #dcfce7 !important;
+}
+
+body.dark-mode.xl-studio #course-app button.bg-white,
+body.dark-mode.xl-studio #course-app button.bg-white span {
+    background: #f0fdf4 !important;
+    color: #14532d !important;
+    border-color: #bbf7d0 !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area :is(h2, h3, h4, p, li, .text-slate-900, .text-slate-800, .text-slate-700, .text-slate-600, .text-slate-500):not(.nd-visual, .nd-visual *) {
+    color: #14532d !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area :is(h2, h3):not(.nd-visual, .nd-visual *) {
+    color: #052e16 !important;
+}
+
+body.dark-mode.xl-studio #tutorial-content {
+    background: #f8fdf9 !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area .nd-visual {
+    background: #ffffff !important;
+    color: #0f172a !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area .nd-visual .nd-rail {
+    background: #111827 !important;
+    color: #e5e7eb !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area .nd-visual .nd-brand {
+    color: #86efac !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area .nd-visual .nd-muted {
+    color: #9ca3af !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area .nd-visual .nd-item {
+    color: #d1d5db !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area .nd-visual .nd-on {
+    background: #107c41 !important;
+    color: #ffffff !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area .nd-visual .nd-on-dark {
+    background: #111827 !important;
+    color: #e5e7eb !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area .nd-visual .nd-on-dark span {
+    color: #e5e7eb !important;
+}
+
+body.dark-mode.xl-studio #dynamic-area .nd-visual .nd-top,
+body.dark-mode.xl-studio #dynamic-area .nd-visual .nd-top span {
+    color: #166534 !important;
+}

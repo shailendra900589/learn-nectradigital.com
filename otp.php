@@ -15,6 +15,7 @@ $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
+    enforce_request_budget('student-otp', 12, 900);
     $action = $_POST['action'] ?? '';
     $email = filter_var(trim($_POST['email'] ?? ''), FILTER_VALIDATE_EMAIL) ?: $email;
 
@@ -75,8 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newPassword = $_POST['new_password'] ?? '';
         if (!$email || strlen($otp) !== 6) {
             $error = 'Enter the 6-digit OTP.';
-        } elseif (strlen($newPassword) < 8) {
-            $error = 'New password must be at least 8 characters.';
+        } elseif (!password_meets_policy($newPassword)) {
+            $error = 'New password must be at least 8 characters and include a letter and a number.';
         } else {
             $result = verify_otp($pdo, $email, 'password_reset', $otp);
             if (!$result['ok']) {
@@ -115,68 +116,68 @@ require_once 'includes/header.php';
         <?php endif; ?>
 
         <?php if($step === 'request'): ?>
-            <form method="POST" action="otp" class="space-y-4">
+            <form method="POST" action="<?php echo h(lang_href('otp')); ?>" class="space-y-4">
                 <?php echo csrf_field(); ?>
                 <input type="hidden" name="purpose" value="password_reset">
                 <input type="hidden" name="action" value="request_reset">
                 <div>
-                    <label class="block text-sm font-bold text-slate-700 mb-1">Email address</label>
+                    <label class="block text-sm font-bold text-slate-700 mb-1"><?php echo h(t('otp.email')); ?></label>
                     <input type="email" name="email" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" required>
                 </div>
-                <button class="w-full edu-primary-btn py-3">Send OTP</button>
+                <button class="w-full edu-primary-btn py-3"><?php echo h(t('otp.send')); ?></button>
             </form>
         <?php elseif($step === 'done'): ?>
-            <a href="login" class="block text-center edu-primary-btn py-3">Go to Login</a>
+            <a href="<?php echo h(lang_href('login')); ?>" class="block text-center edu-primary-btn py-3"><?php echo h(t('otp.go')); ?></a>
         <?php elseif($purpose === 'password_reset'): ?>
-            <form method="POST" action="otp" class="space-y-4">
+            <form method="POST" action="<?php echo h(lang_href('otp')); ?>" class="space-y-4">
                 <?php echo csrf_field(); ?>
                 <input type="hidden" name="purpose" value="password_reset">
                 <input type="hidden" name="action" value="reset_password">
                 <input type="hidden" name="email" value="<?php echo h($email); ?>">
                 <div>
-                    <label class="block text-sm font-bold text-slate-700 mb-1">Email</label>
+                    <label class="block text-sm font-bold text-slate-700 mb-1"><?php echo h(t('otp.email_short')); ?></label>
                     <input type="email" value="<?php echo h($email); ?>" class="w-full border border-gray-200 bg-slate-50 rounded-lg px-4 py-3" disabled>
                 </div>
                 <div>
-                    <label class="block text-sm font-bold text-slate-700 mb-1">OTP</label>
+                    <label class="block text-sm font-bold text-slate-700 mb-1"><?php echo h(t('otp.code')); ?></label>
                     <input type="text" name="otp" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-center text-2xl font-black tracking-[0.35em] focus:ring-2 focus:ring-blue-500 outline-none" required>
                 </div>
                 <div>
-                    <label class="block text-sm font-bold text-slate-700 mb-1">New Password</label>
+                    <label class="block text-sm font-bold text-slate-700 mb-1"><?php echo h(t('otp.new_password')); ?></label>
                     <input type="password" name="new_password" minlength="8" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" required>
                 </div>
-                <button class="w-full edu-primary-btn py-3">Reset Password</button>
+                <button class="w-full edu-primary-btn py-3"><?php echo h(t('otp.reset')); ?></button>
             </form>
         <?php else: ?>
-            <form method="POST" action="otp" class="space-y-4">
+            <form method="POST" action="<?php echo h(lang_href('otp')); ?>" class="space-y-4">
                 <?php echo csrf_field(); ?>
                 <input type="hidden" name="purpose" value="registration">
                 <input type="hidden" name="action" value="verify_registration">
                 <input type="hidden" name="email" value="<?php echo h($email); ?>">
                 <div>
-                    <label class="block text-sm font-bold text-slate-700 mb-1">Email</label>
+                    <label class="block text-sm font-bold text-slate-700 mb-1"><?php echo h(t('otp.email_short')); ?></label>
                     <input type="email" value="<?php echo h($email); ?>" class="w-full border border-gray-200 bg-slate-50 rounded-lg px-4 py-3" disabled>
                 </div>
                 <div>
-                    <label class="block text-sm font-bold text-slate-700 mb-1">OTP</label>
+                    <label class="block text-sm font-bold text-slate-700 mb-1"><?php echo h(t('otp.code')); ?></label>
                     <input type="text" name="otp" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" class="w-full border border-gray-300 rounded-lg px-4 py-3 text-center text-2xl font-black tracking-[0.35em] focus:ring-2 focus:ring-blue-500 outline-none" required>
                 </div>
-                <button class="w-full edu-primary-btn py-3">Verify & Continue</button>
+                <button class="w-full edu-primary-btn py-3"><?php echo h(t('otp.verify')); ?></button>
             </form>
         <?php endif; ?>
 
         <?php if($email && $step !== 'request' && $step !== 'done'): ?>
-            <form method="POST" action="otp" class="mt-4">
+            <form method="POST" action="<?php echo h(lang_href('otp')); ?>" class="mt-4">
                 <?php echo csrf_field(); ?>
                 <input type="hidden" name="purpose" value="<?php echo h($purpose); ?>">
                 <input type="hidden" name="action" value="resend">
                 <input type="hidden" name="email" value="<?php echo h($email); ?>">
-                <button class="w-full border border-slate-200 hover:bg-slate-50 text-slate-700 font-black rounded-lg py-3">Resend OTP</button>
+                <button class="w-full border border-slate-200 hover:bg-slate-50 text-slate-700 font-black rounded-lg py-3"><?php echo h(t('otp.resend')); ?></button>
             </form>
         <?php endif; ?>
 
         <div class="mt-5 text-center">
-            <a href="login" class="text-sm font-bold text-blue-600 hover:underline">Back to login</a>
+            <a href="<?php echo h(lang_href('login')); ?>" class="text-sm font-bold text-blue-600 hover:underline"><?php echo h(t('otp.back')); ?></a>
         </div>
     </div>
 </section>

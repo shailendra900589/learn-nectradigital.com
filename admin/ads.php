@@ -11,8 +11,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     verify_csrf();
     $stmt = $pdo->prepare("DELETE FROM ads WHERE id = :id");
     if ($stmt->execute(['id' => post_int('ad_id')])) {
-        $success = "Advertisement removed successfully!";
+        $success = 'Advertisement removed.';
     }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'set_ad_status') {
+    verify_csrf();
+    $active = ($_POST['active'] ?? '') === '1';
+    $stmt = $pdo->prepare('UPDATE ads SET is_active = ? WHERE id = ?');
+    $stmt->execute([(int)$active, post_int('ad_id')]);
+    $success = $active ? 'Ad published to its selected placement.' : 'Ad paused.';
 }
 
 // --- 2. HANDLE ADD & UPDATE ---
@@ -22,14 +30,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && ($_POST['action'] ?? '') === 'save_a
     $ad_name = trim($_POST['ad_name'] ?? '');
     $ad_type = in_array(($_POST['ad_type'] ?? ''), ['google', 'custom'], true) ? $_POST['ad_type'] : 'custom';
     $allowed_locations = array_keys(content_ad_locations());
-    $location = in_array(($_POST['location'] ?? ''), $allowed_locations, true) ? $_POST['location'] : 'inline_mid';
+    $location = in_array(($_POST['location'] ?? ''), $allowed_locations, true) ? $_POST['location'] : 'sitewide';
     $is_active = isset($_POST['is_active']) ? 1 : 0;
     
     $ad_code = '';
 
     // Check if the user used the Image Upload feature
     if (isset($_POST['ui_ad_type']) && $_POST['ui_ad_type'] == 'image') {
-        $ad_link = filter_var($_POST['ad_link'] ?? '', FILTER_VALIDATE_URL) ?: '#';
+        $ad_link = filter_var($_POST['ad_link'] ?? '', FILTER_VALIDATE_URL);
+        $ad_link = $ad_link && in_array(strtolower((string)parse_url($ad_link, PHP_URL_SCHEME)), ['http', 'https'], true)
+            ? $ad_link
+            : '#';
         
         // Handle the file upload
         if (isset($_FILES['ad_image']) && $_FILES['ad_image']['error'] == 0) {
@@ -74,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && ($_POST['action'] ?? '') === 'save_a
         }
     } else {
         // Normal Google Ad or Custom HTML
-        $ad_code = $_POST['ad_code'];
+        $ad_code = trim((string)($_POST['ad_code'] ?? ''));
     }
 
     // Save to Database
@@ -89,14 +100,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && ($_POST['action'] ?? '') === 'save_a
                 $stmt->execute(['name' => $ad_name, 'type' => $ad_type, 'code' => $ad_code, 'loc' => $location, 'status' => $is_active]);
                 $success = "New ad placement created!";
             }
-        } catch (PDOException $e) { $error = "Database Error: " . $e->getMessage(); }
+        } catch (PDOException $e) {
+            error_log('Ad save failed: ' . $e->getMessage());
+            $error = "The ad could not be saved. Please try again.";
+        }
     } else if (empty($error)) {
         $error = "Ad name and configuration are required.";
     }
 }
 
 // --- 3. PREPARE EDIT DATA ---
-$edit_data = ['id'=>'','ad_name'=>'','ad_type'=>'google','ad_code'=>'','location'=>'inline_mid','is_active'=>1];
+$edit_data = ['id'=>'','ad_name'=>'','ad_type'=>'google','ad_code'=>'','location'=>'sitewide','is_active'=>1];
 if (isset($_GET['edit'])) {
     $stmt = $pdo->prepare("SELECT * FROM ads WHERE id = :id");
     $stmt->execute(['id' => $_GET['edit']]);
@@ -112,6 +126,7 @@ $contentAdLocations = content_ad_locations();
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ad Management | Learn.Nectra</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <?php echo admin_styles(); ?>
@@ -124,18 +139,18 @@ $contentAdLocations = content_ad_locations();
         .code-input { font-family: 'Courier New', monospace; font-size: 13px; background: #1e293b; color: #34d399; }
     </style>
 </head>
-<body class="bg-slate-50 font-sans antialiased flex h-screen overflow-hidden text-slate-800">
+<body class="admin-workspace">
     <?php echo admin_sidebar($pdo, 'ads'); ?>
 
-    <main class="flex-1 flex flex-col overflow-y-auto">
+    <main class="admin-main flex-1 flex flex-col overflow-y-auto">
         <header class="admin-header flex items-center px-8 sticky top-0 z-10">
             <div>
                 <div class="text-sm font-black text-blue-600 uppercase tracking-widest">Ads</div>
-                <h2 class="text-2xl font-black text-slate-950">Content Ads</h2>
+                <h1 class="text-2xl font-black text-slate-950">Content Ads</h1>
             </div>
         </header>
 
-        <div class="p-8">
+        <div class="admin-content">
         <?php if($error): ?>
                 <div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-sm mb-6 flex items-center">
                     <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>
@@ -174,7 +189,7 @@ $contentAdLocations = content_ad_locations();
                             <div>
                                 <label class="block text-xs font-bold uppercase text-gray-500 mb-1">Ad Format</label>
                                 <select name="ui_ad_type" id="ui_ad_type" onchange="toggleAdFields()" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="google" <?php if($edit_data['ad_type'] == 'google') echo 'selected'; ?>>Google Adsense</option>
+                                    <option value="google" <?php if($edit_data['ad_type'] == 'google') echo 'selected'; ?>>Google AdSense</option>
                                     <option value="image" <?php if($edit_data['ad_type'] == 'custom' && strpos($edit_data['ad_code'], '<img') !== false) echo 'selected'; ?>>Custom Image Banner</option>
                                     <option value="custom" <?php if($edit_data['ad_type'] == 'custom' && strpos($edit_data['ad_code'], '<img') === false) echo 'selected'; ?>>Custom HTML</option>
                                     <option value="native_text">Native Text Ad</option>
@@ -196,7 +211,9 @@ $contentAdLocations = content_ad_locations();
                         </div>
 
                         <div class="mb-4 rounded-lg bg-amber-50 border border-amber-100 text-amber-800 p-3 text-xs font-bold leading-5">
-                            Side ads are disabled. All ad types render only inside lesson text/content areas.
+                            <strong>Publishing coverage</strong>
+                            <p>Every placement reaches all readable chapters across every course. Choose <strong>Public site + all chapters</strong> to also show the ad on Home, Search, Contact, Privacy, and Terms.</p>
+                            <p>Ad-free learners are excluded. Multiple active ads in the same placement are shown in creation order.</p>
                         </div>
 
                         <div id="code_block" class="mb-4">
@@ -268,7 +285,16 @@ $contentAdLocations = content_ad_locations();
                                             <?php endif; ?>
                                         </td>
                                         <td class="px-6 py-4 text-right">
-                                            <div class="flex justify-end gap-1 opacity-80 hover:opacity-100">
+                                            <div class="flex flex-wrap items-center justify-end gap-2">
+                                                <form method="POST" action="ads">
+                                                    <?php echo csrf_field(); ?>
+                                                    <input type="hidden" name="action" value="set_ad_status">
+                                                    <input type="hidden" name="ad_id" value="<?php echo (int)$ad['id']; ?>">
+                                                    <input type="hidden" name="active" value="<?php echo $ad['is_active'] ? '0' : '1'; ?>">
+                                                    <button type="submit" class="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-blue-600">
+                                                        <?php echo $ad['is_active'] ? 'Pause' : 'Publish'; ?>
+                                                    </button>
+                                                </form>
                                                 <a href="ads?edit=<?php echo $ad['id']; ?>" class="p-2 text-blue-600 hover:bg-blue-100 rounded-md transition" title="Edit">
                                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                                                 </a>

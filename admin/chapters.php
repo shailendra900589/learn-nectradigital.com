@@ -213,6 +213,7 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Chapters | Learn.Nectra</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -236,22 +237,22 @@ $quizBuilderItems = array_slice($quizBuilderItems, 0, 25);
         .quiz-card.is-empty { opacity: 0.72; }
     </style>
 </head>
-<body class="bg-slate-50 font-sans antialiased flex h-screen overflow-hidden text-slate-800">
+<body class="admin-workspace">
     <?php echo admin_sidebar($pdo, 'courses'); ?>
 
-    <main class="flex-1 flex flex-col overflow-y-auto">
+    <main class="admin-main flex-1 flex flex-col overflow-y-auto">
         <header class="admin-header flex items-center px-8 sticky top-0 z-10">
             <div>
                 <a href="courses" class="text-sm text-blue-600 hover:underline flex items-center gap-1 mb-1">
                     Back to Courses
                 </a>
-                <h2 class="text-2xl font-black text-slate-950 leading-none">
+                <h1 class="text-2xl font-black text-slate-950 leading-none">
                     <?php echo htmlspecialchars($course['title']); ?> <span class="text-gray-400 font-normal text-lg">/ Chapters</span>
-                </h2>
+                </h1>
             </div>
         </header>
 
-        <div class="p-8">
+        <div class="admin-content">
             <?php if($error): ?>
                 <div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-sm mb-6 flex items-center">
                     <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>

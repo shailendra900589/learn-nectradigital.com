@@ -1,8 +1,19 @@
 User-agent: *
-Allow: /
 Disallow: /admin/
 Disallow: /includes/
+Disallow: /sessions/
 Disallow: /assets/uploads/
+Disallow: /profile/
+Disallow: /public_profile.php
+Disallow: /search_ajax
+Disallow: /api_runner.php
+Disallow: /llms-full.txt
+
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: Google-Extended
+User-agent: PerplexityBot
+User-agent: Applebot-Extended
+Disallow: /
 
 Sitemap: https://learn.nectradigital.com/sitemap.xml
-Sitemap: https://learn.nectradigital.com/feed.xml

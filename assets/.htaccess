@@ -1,0 +1,10 @@
+Options -Indexes
+
+<FilesMatch "\.(php|phtml|phar|php[0-9]?|htaccess|htpasswd|ini|log|sql|bak)$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(.*)$ ../asset_guard.php?path=$1 [L,QSA]
+</IfModule>

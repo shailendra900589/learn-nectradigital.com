@@ -39,18 +39,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Add Course | Learn.Nectra</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <?php echo admin_styles(); ?>
 </head>
-<body class="bg-slate-50 font-sans antialiased flex h-screen overflow-hidden text-slate-800">
+<body class="admin-workspace">
     <?php echo admin_sidebar($pdo, 'courses'); ?>
 
-    <main class="flex-1 flex flex-col overflow-y-auto">
+    <main class="admin-main flex-1 flex flex-col overflow-y-auto">
         <header class="admin-header flex items-center px-8 sticky top-0 z-10">
             <div>
                 <a href="courses" class="text-sm text-blue-600 font-bold hover:underline">Back to Courses</a>
-                <h2 class="text-2xl font-black text-slate-950">Add New Course</h2>
+                <h1 class="text-2xl font-black text-slate-950">Add New Course</h1>
             </div>
         </header>
 

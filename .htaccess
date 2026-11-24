@@ -1,29 +1,161 @@
+# =========================================================
+# CORE SETTINGS
+# =========================================================
 RewriteEngine On
+
+# Keep application internals, sessions, and maintenance scripts off the web.
+RewriteRule "(^|/)\." - [F,END]
+RewriteRule ^(?:includes|sessions|vendor|node_modules)(?:/|$) - [F,END,NC]
+RewriteRule ^(?:seed[^/]*|router)(?:\.php)?(?:/|$) - [F,END,NC]
+RewriteRule ^assets/uploads/.*\.(?:php[0-9]*|phtml|phar)(?:[./]|$) - [F,END,NC]
+
+# Default homepage files
+DirectoryIndex index.php index.html index.htm
+
+# Disable directory browsing
 Options -Indexes
 
-# Clean public course URLs.
+# =========================================================
+# SECURITY HEADERS
+# =========================================================
+<IfModule mod_headers.c>
+
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), bluetooth=(), interest-cohort=()"
+    Header always set X-Permitted-Cross-Domain-Policies "none"
+    Header always set Content-Security-Policy "base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+
+</IfModule>
+
+# =========================================================
+# PROTECTED ASSETS GATEKEEPER (BLOCK DIRECT / VIEW-SOURCE ACCESS)
+# =========================================================
+RewriteRule ^assets(?:/(.*))?$ asset_guard.php?path=$1 [L,QSA]
+
+# =========================================================
+# CLEAN URL ROUTES (KEEP EXISTING FUNCTIONALITY SAME)
+# =========================================================
+
+# Language copies. English stays on the unprefixed URL so existing canonicals do not move.
+RewriteRule ^(hi|bn|ta|te|mr|gu|pa)/?$ index.php?lang=$1 [L,QSA]
+RewriteRule ^(hi|bn|ta|te|mr|gu|pa)/course/([a-z0-9-]+)/([0-9]+)-[a-z0-9-]+/?$ course.php?lang=$1&slug=$2&chapter_id=$3 [NC,L,QSA]
+RewriteRule ^(hi|bn|ta|te|mr|gu|pa)/course/([a-z0-9-]+)/?$ course.php?lang=$1&slug=$2 [NC,L,QSA]
+RewriteRule ^(hi|bn|ta|te|mr|gu|pa)/profile/([a-f0-9]{32,64})/?$ public_profile.php?lang=$1&token=$2 [NC,L,QSA]
+RewriteRule ^(hi|bn|ta|te|mr|gu|pa)/(index|search|contact|privacy|terms|login|student|profile|billing|otp|logout)/?$ $2.php?lang=$1 [NC,L,QSA]
+
+# Course URLs
 RewriteRule ^course/([a-z0-9-]+)/([0-9]+)-[a-z0-9-]+/?$ course.php?slug=$1&chapter_id=$2 [NC,L,QSA]
 RewriteRule ^course/([a-z0-9-]+)/?$ course.php?slug=$1 [NC,L,QSA]
+
+# Public profile URL
 RewriteRule ^profile/([a-f0-9]{32,64})/?$ public_profile.php?token=$1 [NC,L,QSA]
 
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_FILENAME}\.php -f
-RewriteRule ^(.*)$ $1.php [NC,L]
-
-# Make sitemap.php accessible via sitemap.xml
+# XML Routes
 RewriteRule ^sitemap\.xml$ sitemap.php [L]
+RewriteRule ^llms\.txt$ llms.php [L]
+RewriteRule ^llms-full(?:\.txt)?$ - [G,END,NC]
 RewriteRule ^feed\.xml$ feed.php [L]
 RewriteRule ^opensearch\.xml$ opensearch.xml.php [L]
 
-# Never execute uploaded files as PHP.
-<IfModule mod_rewrite.c>
+# =========================================================
+# AUTO LOAD .PHP FILES (SAFE)
+# Example: /contact => contact.php
+# =========================================================
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}\.php -f
+RewriteRule ^(.+)$ $1.php [NC,L]
+
+# =========================================================
+# BLOCK EXECUTION IN UPLOADS
+# =========================================================
 RewriteRule ^assets/uploads/.*\.(php|phtml|phar|php[0-9]?)$ - [F,L,NC]
+
+# =========================================================
+# PROTECT SENSITIVE FILES
+# =========================================================
+<FilesMatch "^(composer\.(json|lock)|package\.json|package-lock\.json|yarn\.lock|\.env|\.gitignore|README\.md|error_log|php\.ini|.*\.(?:sql|bak|old|log|zip|tar|gz|ini|dist))$">
+    Require all denied
+</FilesMatch>
+
+<Files ".htaccess">
+    Require all denied
+</Files>
+
+# =========================================================
+# CACHE / SPEED OPTIMIZATION
+# =========================================================
+<IfModule mod_expires.c>
+    ExpiresActive On
+
+    ExpiresByType text/css "access plus 30 days"
+    ExpiresByType application/javascript "access plus 30 days"
+    ExpiresByType text/javascript "access plus 30 days"
+
+    ExpiresByType image/jpeg "access plus 90 days"
+    ExpiresByType image/png "access plus 90 days"
+    ExpiresByType image/gif "access plus 90 days"
+    ExpiresByType image/webp "access plus 90 days"
+    ExpiresByType image/svg+xml "access plus 90 days"
+    ExpiresByType image/x-icon "access plus 90 days"
+
+    ExpiresByType font/woff "access plus 90 days"
+    ExpiresByType font/woff2 "access plus 90 days"
+
+    ExpiresDefault "access plus 7 days"
 </IfModule>
 
-<IfModule mod_headers.c>
-Header always set X-Content-Type-Options "nosniff"
-Header always set Referrer-Policy "strict-origin-when-cross-origin"
-Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
-SetEnvIfNoCase Request_URI "^.*/assets/uploads/" no_index_upload=1
-Header set X-Robots-Tag "noindex, nofollow, noimageindex" env=no_index_upload
+<Files "asset_guard.php">
+    <IfModule mod_expires.c>
+        ExpiresActive Off
+    </IfModule>
+</Files>
+
+# =========================================================
+# GZIP COMPRESSION
+# =========================================================
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE text/javascript
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/json
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE text/xml
 </IfModule>
+
+# =========================================================
+# NO INDEX FOR UPLOAD FOLDER
+# =========================================================
+<IfModule mod_headers.c>
+    SetEnvIfNoCase Request_URI "^.*/assets/uploads/" no_index_upload=1
+    Header set X-Robots-Tag "noindex, nofollow, noimageindex" env=no_index_upload
+</IfModule>
+
+# =========================================================
+# PREVENT HOTLINKING (OPTIONAL SAFE)
+# =========================================================
+RewriteCond %{HTTP_REFERER} !^$
+RewriteCond %{HTTP_REFERER} !^https?://(www\.)?learning\.nectradigital\.com [NC]
+RewriteRule \.(jpg|jpeg|png|gif|webp|svg)$ - [NC,L]
+
+# =========================================================
+# CUSTOM ERROR PAGES (ONLY IF FILE EXISTS)
+# =========================================================
+ErrorDocument 403 default
+ErrorDocument 404 default
+
+# =========================================================
+# END
+# =========================================================
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# Set the “ea-php82” package as the default “PHP” programming language.
+<IfModule mime_module>
+  AddHandler application/x-httpd-ea-php82 .php .php8 .phtml
+</IfModule>
+# php -- END cPanel-generated handler, do not edit

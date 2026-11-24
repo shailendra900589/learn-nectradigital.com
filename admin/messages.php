@@ -37,6 +37,7 @@ $messages = $stmt->fetchAll();
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inbox | Learn.Nectra</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <?php echo admin_styles(); ?>
@@ -47,18 +48,18 @@ $messages = $stmt->fetchAll();
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
-<body class="bg-slate-50 font-sans antialiased flex h-screen overflow-hidden text-slate-800">
+<body class="admin-workspace">
     <?php echo admin_sidebar($pdo, 'messages'); ?>
 
-    <main class="flex-1 flex flex-col overflow-y-auto relative">
+    <main class="admin-main flex-1 flex flex-col overflow-y-auto relative">
         <header class="admin-header flex items-center px-8 sticky top-0 z-10">
             <div>
                 <div class="text-sm font-black text-blue-600 uppercase tracking-widest">Inbox</div>
-                <h2 class="text-2xl font-black text-slate-950">Messages & Inquiries</h2>
+                <h1 class="text-2xl font-black text-slate-950">Messages & Inquiries</h1>
             </div>
         </header>
 
-        <div class="p-8">
+        <div class="admin-content">
             <?php if($success): ?>
                 <div class="bg-green-50 border-l-4 border-green-500 text-green-700 p-4 rounded-md shadow-sm mb-6">
                     <?php echo h($success); ?>

@@ -198,27 +198,32 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Students & Plans | Learn.Nectra</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <?php echo admin_styles(); ?>
 </head>
-<body class="bg-slate-50 font-sans antialiased flex h-screen overflow-hidden text-slate-800">
+<body class="admin-workspace">
     <?php echo admin_sidebar($pdo, 'students'); ?>
 
-    <main class="flex-1 overflow-y-auto">
+    <main class="admin-main flex-1 overflow-y-auto">
         <header class="admin-header flex items-center justify-between px-8 sticky top-0 z-10">
             <div>
                 <div class="text-sm font-black text-blue-600 uppercase tracking-widest">Users</div>
-                <h2 class="text-2xl font-black text-slate-950">Students, Plans & Payments</h2>
+                <h1 class="text-2xl font-black text-slate-950">Students, Plans & Payments</h1>
             </div>
-            <span class="text-sm text-gray-500"><?php echo count($students); ?> students</span>
+            <nav class="admin-section-nav" aria-label="Student management sections">
+                <a href="#plans">Plans</a>
+                <a href="#student-access">Students</a>
+                <a href="#payment-history">Payments</a>
+            </nav>
         </header>
 
-        <div class="p-8 space-y-8">
+        <div class="admin-content space-y-8">
             <?php if($error): ?><div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md"><?php echo h($error); ?></div><?php endif; ?>
             <?php if($success): ?><div class="bg-green-50 border-l-4 border-green-500 text-green-700 p-4 rounded-md"><?php echo h($success); ?></div><?php endif; ?>
 
-            <section class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <section class="admin-plan-layout" id="plans">
                 <form method="POST" action="students" class="bg-white rounded-xl border border-gray-200 p-6">
                     <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="settings">
@@ -227,12 +232,12 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                         <input type="checkbox" name="plans_enabled" class="w-5 h-5 text-blue-600 rounded" <?php echo plans_enabled($pdo) ? 'checked' : ''; ?>>
                         Enable plan purchase and admin activation
                     </label>
-                    <label class="block text-sm font-bold text-slate-700 mt-4 mb-1">Payment Instructions</label>
-                    <textarea name="payment_instructions" rows="5" class="w-full border border-gray-300 rounded-lg p-3 text-sm"><?php echo h(platform_setting($pdo, 'payment_instructions')); ?></textarea>
-                    <button class="mt-4 bg-slate-900 hover:bg-blue-600 text-white font-bold px-5 py-2.5 rounded-lg">Save Settings</button>
+                    <label for="payment-instructions" class="block text-sm font-bold text-slate-700 mt-4 mb-1">Payment instructions</label>
+                    <textarea id="payment-instructions" name="payment_instructions" rows="5" class="admin-input text-sm"><?php echo h(platform_setting($pdo, 'payment_instructions')); ?></textarea>
+                    <button class="mt-4 admin-btn-dark">Save Settings</button>
                 </form>
 
-                <form method="POST" action="students" class="bg-white rounded-xl border border-gray-200 p-6 xl:col-span-2">
+                <form method="POST" action="students" class="bg-white rounded-xl border border-gray-200 p-6">
                     <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="save_plan">
                     <input type="hidden" name="plan_id" value="<?php echo (int)$planForm['id']; ?>">
@@ -240,14 +245,28 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                         <h3 class="text-lg font-black text-slate-900"><?php echo $editPlan ? 'Edit Plan' : 'Create Plan'; ?></h3>
                         <?php if($editPlan): ?><a href="students" class="text-sm text-blue-600 font-bold">New Plan</a><?php endif; ?>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <input name="name" value="<?php echo h($planForm['name']); ?>" placeholder="Plan name" class="border border-gray-300 rounded-lg p-3" required>
-                        <input name="slug" value="<?php echo h($planForm['slug']); ?>" placeholder="plan-slug" class="border border-gray-300 rounded-lg p-3">
-                        <input name="price" value="<?php echo h((string)$planForm['price']); ?>" type="number" step="0.01" min="0" class="border border-gray-300 rounded-lg p-3" required>
-                        <input name="currency" value="<?php echo h($planForm['currency']); ?>" class="border border-gray-300 rounded-lg p-3" maxlength="8">
-                        <input name="duration_days" value="<?php echo (int)$planForm['duration_days']; ?>" type="number" min="1" class="border border-gray-300 rounded-lg p-3">
-                        <textarea name="description" rows="2" placeholder="Description" class="md:col-span-3 border border-gray-300 rounded-lg p-3"><?php echo h($planForm['description']); ?></textarea>
-                        <textarea name="features" rows="4" placeholder="One feature per line" class="md:col-span-4 border border-gray-300 rounded-lg p-3"><?php echo h($planForm['features']); ?></textarea>
+                    <div class="admin-plan-fields">
+                        <label class="admin-field"><span>Plan name</span>
+                            <input name="name" value="<?php echo h($planForm['name']); ?>" placeholder="Plan name" class="admin-input" required>
+                        </label>
+                        <label class="admin-field"><span>URL slug</span>
+                            <input name="slug" value="<?php echo h($planForm['slug']); ?>" placeholder="plan-slug" class="admin-input">
+                        </label>
+                        <label class="admin-field"><span>Price</span>
+                            <input name="price" value="<?php echo h((string)$planForm['price']); ?>" type="number" step="0.01" min="0" class="admin-input" required>
+                        </label>
+                        <label class="admin-field"><span>Currency</span>
+                            <input name="currency" value="<?php echo h($planForm['currency']); ?>" class="admin-input" maxlength="8">
+                        </label>
+                        <label class="admin-field"><span>Duration in days</span>
+                            <input name="duration_days" value="<?php echo (int)$planForm['duration_days']; ?>" type="number" min="1" class="admin-input">
+                        </label>
+                        <label class="admin-field admin-field-full"><span>Description</span>
+                            <textarea name="description" rows="2" placeholder="Description" class="admin-input"><?php echo h($planForm['description']); ?></textarea>
+                        </label>
+                        <label class="admin-field admin-field-full"><span>Features</span>
+                            <textarea name="features" rows="4" placeholder="One feature per line" class="admin-input"><?php echo h($planForm['features']); ?></textarea>
+                        </label>
                     </div>
                     <div class="flex flex-wrap gap-3 mt-4 text-sm font-bold">
                         <?php foreach(['ad_free' => 'Ad-free', 'priority_support' => 'Priority support', 'downloadable_resources' => 'Downloads', 'certificate_access' => 'Certificates', 'is_active' => 'Plan active'] as $field => $label): ?>
@@ -257,7 +276,7 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                             </label>
                         <?php endforeach; ?>
                     </div>
-                    <button class="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-lg">Save Plan</button>
+                    <button class="mt-5 admin-btn-primary">Save Plan</button>
                 </form>
             </section>
 
@@ -283,7 +302,7 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                 </div>
             </section>
 
-            <section class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <section id="student-access" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div class="px-6 py-4 bg-slate-50 border-b border-gray-200">
                     <h3 class="font-black text-slate-900">Students Access Control</h3>
                 </div>
@@ -293,10 +312,6 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                         <tbody class="divide-y divide-gray-100">
                             <?php foreach($students as $student): ?>
                                 <tr>
-                                    <form method="POST" action="students">
-                                        <?php echo csrf_field(); ?>
-                                        <input type="hidden" name="action" value="update_student">
-                                        <input type="hidden" name="student_id" value="<?php echo (int)$student['id']; ?>">
                                         <td class="p-4 align-top">
                                             <div class="font-black text-slate-900"><?php echo h($student['name']); ?></div>
                                             <div class="text-xs text-slate-500"><?php echo h($student['email']); ?></div>
@@ -309,25 +324,31 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                                         <td class="p-4 align-top">
                                             <div class="grid grid-cols-2 gap-2 text-xs font-bold">
                                                 <?php foreach(['content_access' => 'Content', 'profile_public' => 'Profile', 'public_email' => 'Email public', 'public_phone' => 'Phone public', 'hide_ads_override' => 'No ads'] as $field => $label): ?>
-                                                    <label class="flex items-center gap-2"><input type="checkbox" name="<?php echo h($field); ?>" <?php echo (int)($student[$field] ?? 0) === 1 ? 'checked' : ''; ?>> <?php echo h($label); ?></label>
+                                                    <label class="flex items-center gap-2"><input form="student-form-<?php echo (int)$student['id']; ?>" type="checkbox" name="<?php echo h($field); ?>" <?php echo (int)($student[$field] ?? 0) === 1 ? 'checked' : ''; ?>> <?php echo h($label); ?></label>
                                                 <?php endforeach; ?>
                                             </div>
-                                            <select name="account_status" class="mt-3 border border-gray-300 rounded-lg px-2 py-1 text-xs">
+                                            <select form="student-form-<?php echo (int)$student['id']; ?>" aria-label="Account status" name="account_status" class="mt-3 border border-gray-300 rounded-lg px-2 py-1 text-xs">
                                                 <?php foreach(['active', 'paused', 'blocked'] as $status): ?><option value="<?php echo h($status); ?>" <?php echo ($student['account_status'] ?? 'active') === $status ? 'selected' : ''; ?>><?php echo h(ucfirst($status)); ?></option><?php endforeach; ?>
                                             </select>
                                         </td>
                                         <td class="p-4 align-top">
-                                            <select name="plan_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full" <?php echo plans_enabled($pdo) ? '' : 'disabled'; ?>>
+                                            <select form="student-form-<?php echo (int)$student['id']; ?>" aria-label="Plan" name="plan_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full" <?php echo plans_enabled($pdo) ? '' : 'disabled'; ?>>
                                                 <option value="0">Choose plan</option>
                                                 <?php foreach($plans as $plan): if(!$plan['is_active']) continue; ?>
                                                     <option value="<?php echo (int)$plan['id']; ?>"><?php echo h($plan['name']); ?></option>
                                                 <?php endforeach; ?>
                                             </select>
-                                            <label class="mt-2 flex items-center gap-2 text-xs font-bold"><input type="checkbox" name="activate_plan" <?php echo plans_enabled($pdo) ? '' : 'disabled'; ?>> Activate selected plan</label>
-                                            <input name="admin_note" placeholder="Admin note" class="mt-2 border border-gray-300 rounded-lg px-3 py-2 text-xs w-full">
+                                            <label class="mt-2 flex items-center gap-2 text-xs font-bold"><input form="student-form-<?php echo (int)$student['id']; ?>" type="checkbox" name="activate_plan" <?php echo plans_enabled($pdo) ? '' : 'disabled'; ?>> Activate selected plan</label>
+                                            <input form="student-form-<?php echo (int)$student['id']; ?>" name="admin_note" placeholder="Admin note" class="mt-2 border border-gray-300 rounded-lg px-3 py-2 text-xs w-full">
                                         </td>
-                                        <td class="p-4 align-top text-right"><button class="bg-slate-900 hover:bg-blue-600 text-white font-bold px-4 py-2 rounded-lg">Save</button></td>
+                                        <td class="p-4 align-top text-right">
+                                    <form id="student-form-<?php echo (int)$student['id']; ?>" method="POST" action="students">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="action" value="update_student">
+                                        <input type="hidden" name="student_id" value="<?php echo (int)$student['id']; ?>">
+                                        <button class="bg-slate-900 hover:bg-blue-600 text-white font-bold px-4 py-2 rounded-lg">Save</button>
                                     </form>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -335,7 +356,7 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                 </div>
             </section>
 
-            <section class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <section id="payment-history" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div class="px-6 py-4 bg-slate-50 border-b border-gray-200">
                     <h3 class="font-black text-slate-900">Payment History & Approvals</h3>
                 </div>
@@ -345,22 +366,22 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                         <tbody class="divide-y divide-gray-100">
                             <?php foreach($payments as $payment): ?>
                                 <tr>
-                                    <form method="POST" action="students">
-                                        <?php echo csrf_field(); ?>
-                                        <input type="hidden" name="action" value="payment_status">
-                                        <input type="hidden" name="payment_id" value="<?php echo (int)$payment['id']; ?>">
                                         <td class="p-4"><div class="font-bold"><?php echo h($payment['student_name'] ?: 'Deleted user'); ?></div><div class="text-xs text-slate-500"><?php echo h($payment['student_email'] ?? ''); ?></div></td>
                                         <td class="p-4"><?php echo h($payment['plan_name'] ?: 'Plan'); ?></td>
                                         <td class="p-4"><div class="font-black"><?php echo h($payment['currency']); ?> <?php echo number_format((float)$payment['amount'], 2); ?></div><div class="text-xs text-slate-500"><?php echo h($payment['transaction_ref'] ?: 'No reference'); ?></div></td>
                                         <td class="p-4"><span class="uppercase text-xs font-black"><?php echo h($payment['status']); ?></span></td>
                                         <td class="p-4 text-right">
-                                            <select name="status" class="border border-gray-300 rounded-lg px-2 py-1 text-xs">
+                                    <form method="POST" action="students">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="action" value="payment_status">
+                                        <input type="hidden" name="payment_id" value="<?php echo (int)$payment['id']; ?>">
+                                            <select aria-label="Payment status" name="status" class="border border-gray-300 rounded-lg px-2 py-1 text-xs">
                                                 <?php foreach(['approved', 'rejected', 'refunded'] as $status): ?><option value="<?php echo h($status); ?>"><?php echo h(ucfirst($status)); ?></option><?php endforeach; ?>
                                             </select>
                                             <input name="admin_note" placeholder="Note" class="border border-gray-300 rounded-lg px-2 py-1 text-xs">
                                             <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs">Update</button>
-                                        </td>
                                     </form>
+                                        </td>
                                 </tr>
                             <?php endforeach; ?>
                             <?php if(!$payments): ?><tr><td colspan="5" class="p-8 text-center text-slate-500">No payments yet.</td></tr><?php endif; ?>

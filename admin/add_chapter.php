@@ -45,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Add Chapter | Learn.Nectra</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -65,18 +66,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     </style>
 </head>
-<body class="bg-slate-50 font-sans antialiased flex h-screen overflow-hidden text-slate-800">
+<body class="admin-workspace">
     <?php echo admin_sidebar($pdo, 'courses'); ?>
 
-    <main class="flex-1 flex flex-col overflow-y-auto">
+    <main class="admin-main flex-1 flex flex-col overflow-y-auto">
         <header class="admin-header flex items-center px-8 sticky top-0 z-10">
             <div>
                 <a href="chapters?course_id=<?php echo (int)$course_id; ?>" class="text-sm text-blue-600 font-bold hover:underline">Back to Chapters</a>
-                <h2 class="text-2xl font-black text-slate-950">Add New Chapter</h2>
+                <h1 class="text-2xl font-black text-slate-950">Add New Chapter</h1>
             </div>
         </header>
 
-        <div class="p-8">
+        <div class="admin-content">
             <?php if($error): ?>
                 <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4"><?php echo h($error); ?></div>
             <?php endif; ?>

@@ -99,7 +99,9 @@ function get_public_student_profile(PDO $pdo, string $token): ?array
     if (!preg_match('/^[a-f0-9]{32,64}$/i', $token)) {
         return null;
     }
-    $stmt = $pdo->prepare("SELECT * FROM students WHERE public_token = :token LIMIT 1");
+    $stmt = $pdo->prepare("SELECT id, name, headline, CASE WHEN public_phone = 1 THEN phone ELSE NULL END AS phone, location, website, linkedin, github, skills, bio, profile_photo, public_token,
+        profile_public, public_email, public_phone, account_status, CASE WHEN public_email = 1 THEN email ELSE NULL END AS email
+        FROM students WHERE public_token = :token AND profile_public = 1 AND account_status = 'active' LIMIT 1");
     $stmt->execute(['token' => $token]);
     return $stmt->fetch() ?: null;
 }

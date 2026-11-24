@@ -90,8 +90,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if ($error === '' && $newPassword !== '' && strlen($newPassword) < 8) {
-        $error = 'New password must be at least 8 characters.';
+    $emailChanged = $email && strcasecmp($email, (string)$student['email']) !== 0;
+    $currentPassword = (string)($_POST['current_password'] ?? '');
+    if ($error === '' && ($newPassword !== '' || $emailChanged)) {
+        if (!password_verify($currentPassword, (string)$student['password'])) {
+            $error = 'Enter your current password before changing the email or password.';
+        }
+    }
+    if ($error === '' && $newPassword !== '' && !password_meets_policy($newPassword)) {
+        $error = 'New password must be at least 8 characters and include a letter and a number.';
     }
 
     if ($error === '') {
@@ -171,15 +178,21 @@ $seo_robots = 'noindex, nofollow';
 require_once 'includes/header.php';
 ?>
 
-<section class="site-hero-light py-12 border-b border-blue-100">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<section class="page-intro text-white py-12 md:py-16 border-b border-slate-800 relative overflow-hidden">
+    <div class="absolute inset-0 opacity-20 pointer-events-none" style="background: radial-gradient(circle at 70% 30%, #04AA6D 0%, transparent 60%);"></div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
             <div>
-                <span class="edu-pill mb-4">Student Profile</span>
-                <h1 class="text-4xl md:text-5xl font-black text-slate-950">Profile, QR Card, and Resume</h1>
-                <p class="text-slate-600 mt-3 max-w-2xl">Keep your learning identity updated. Your QR card opens a professional public learning profile.</p>
+                <span class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4 shadow-sm">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Student Credentials
+                </span>
+                <h1 class="text-3xl md:text-5xl font-black text-white tracking-tight">Profile, QR Card &amp; Resume</h1>
+                <p class="text-slate-300 mt-2 max-w-2xl text-sm sm:text-base">Keep your learning identity updated. Your digital QR card allows recruiters &amp; peers to verify your course completion records.</p>
             </div>
-            <a href="<?php echo h($publicUrl); ?>" target="_blank" class="bg-white text-blue-700 border border-blue-100 hover:bg-blue-50 font-bold py-3 px-5 rounded-lg shadow-sm">Open Public Profile</a>
+            <a href="<?php echo h($publicUrl); ?>" target="_blank" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-sm">
+                <span>Open Public Profile &raquo;</span>
+            </a>
         </div>
     </div>
 </section>
@@ -239,8 +252,12 @@ require_once 'includes/header.php';
                         <input type="text" name="github" value="<?php echo h($student['github'] ?? ''); ?>" class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                     <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-1">Current Password</label>
+                        <input type="password" name="current_password" autocomplete="current-password" placeholder="Required to change email or password" class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
                         <label class="block text-sm font-bold text-slate-700 mb-1">New Password</label>
-                        <input type="password" name="new_password" placeholder="Leave blank to keep current password" class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="password" name="new_password" autocomplete="new-password" placeholder="Leave blank to keep current password" class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                 </div>
 
@@ -258,7 +275,7 @@ require_once 'includes/header.php';
                     <h3 class="text-lg font-black text-slate-900 mb-3">Public Profile Privacy</h3>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <label class="flex items-center gap-3 rounded-lg bg-white border border-slate-200 p-3 font-bold text-sm text-slate-700">
-                            <input type="checkbox" name="profile_public" class="w-5 h-5 text-blue-600 rounded" <?php echo (int)($student['profile_public'] ?? 1) === 1 ? 'checked' : ''; ?>>
+                            <input type="checkbox" name="profile_public" class="w-5 h-5 text-blue-600 rounded" <?php echo (int)($student['profile_public'] ?? 0) === 1 ? 'checked' : ''; ?>>
                             Public profile enabled
                         </label>
                         <label class="flex items-center gap-3 rounded-lg bg-white border border-slate-200 p-3 font-bold text-sm text-slate-700">
@@ -288,7 +305,7 @@ require_once 'includes/header.php';
                         <p class="text-sm text-slate-500 mt-1">Valid until <?php echo h(date('M j, Y', strtotime($subscription['ends_at']))); ?></p>
                     <?php endif; ?>
                 </div>
-                <a href="billing" class="block text-center edu-primary-btn px-4 py-3 text-sm">View Plans & Payment History</a>
+                <a href="<?php echo h(lang_href('billing')); ?>" class="block text-center edu-primary-btn px-4 py-3 text-sm"><?php echo h(t('account.plans')); ?></a>
                 <?php if($recentPayments): ?>
                     <div class="mt-4 divide-y divide-slate-100">
                         <?php foreach($recentPayments as $payment): ?>

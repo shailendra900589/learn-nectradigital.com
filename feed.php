@@ -15,10 +15,9 @@ $stmt = $pdo->query("
         c.created_at,
         ch.id AS chapter_id,
         ch.chapter_name,
-        ch.content,
         ch.order_index
     FROM courses c
-    LEFT JOIN chapters ch ON ch.course_id = c.id
+    LEFT JOIN chapters ch ON ch.course_id = c.id AND ch.is_premium = 0
     ORDER BY c.created_at DESC, ch.order_index ASC
     LIMIT 50
 ");
@@ -40,7 +39,7 @@ echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
         <?php foreach ($items as $item):
             $has_chapter = !empty($item['chapter_id']);
             $title = $has_chapter ? $item['chapter_name'] . ' | ' . $item['course_title'] : $item['course_title'];
-            $description = $has_chapter ? seo_excerpt($item['content'], 220) : seo_excerpt($item['course_description'], 220);
+            $description = $has_chapter ? seo_excerpt($item['chapter_name'], 220) : seo_excerpt($item['course_description'], 220);
             $link = $site_url . '/' . ($has_chapter ? chapter_path($item['slug'], (int)$item['chapter_id'], $item['chapter_name']) : course_path($item['slug']));
             $guid = $has_chapter ? 'chapter-' . (int)$item['chapter_id'] : 'course-' . rawurlencode($item['slug']);
         ?>

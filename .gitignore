@@ -1,0 +1,5 @@
+/sessions/
+/error_log
+/.env
+/.env.*
+!/.env.example

@@ -73,26 +73,26 @@ $plansEnabled = plans_enabled($pdo);
     </style>
     <?php echo admin_styles(); ?>
 </head>
-<body class="bg-slate-50 font-sans antialiased h-screen overflow-hidden text-slate-800">
-    <div class="flex h-full">
+<body class="admin-workspace">
+    <div class="admin-shell">
         <?php echo admin_sidebar($pdo, 'dashboard'); ?>
 
-        <main class="flex-1 overflow-y-auto">
-            <header class="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-slate-200">
+        <main class="admin-main flex-1 overflow-y-auto">
+            <header class="admin-header sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-slate-200">
                 <div class="px-8 py-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                     <div>
                         <div class="text-sm font-black text-blue-600 uppercase tracking-widest">Dashboard</div>
                         <h1 class="text-3xl font-black text-slate-950 tracking-tight">Admin Overview</h1>
                     </div>
                     <div class="flex flex-wrap gap-3">
-                        <a href="courses" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-black shadow-sm">Create Course</a>
+                        <a href="add_course" class="admin-btn-primary">Create course</a>
                         <a href="students" class="bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 rounded-xl font-black shadow-sm">Manage Plans</a>
                         <a href="../index" target="_blank" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-5 py-3 rounded-xl font-black shadow-sm">View Site</a>
                     </div>
                 </div>
             </header>
 
-            <div class="p-8 space-y-8">
+            <div class="admin-content space-y-8">
                 <?php if($stats['pending_payments'] > 0): ?>
                     <a href="students" class="admin-card block p-5 border-amber-200 bg-amber-50">
                         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">

@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete_course') {
         try {
             $pdo->beginTransaction();
+            $pdo->prepare("DELETE FROM course_rank WHERE course_id = :id")->execute(['id' => $course_id]);
             $pdo->prepare("DELETE FROM student_progress WHERE course_id = :id")->execute(['id' => $course_id]);
             $pdo->prepare("DELETE FROM chapters WHERE course_id = :id")->execute(['id' => $course_id]);
             $stmt = $pdo->prepare("DELETE FROM courses WHERE id = :id");
@@ -65,23 +66,24 @@ $courses = $stmt->fetchAll();
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Courses | Learn.Nectra</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <?php echo admin_styles(); ?>
 </head>
-<body class="bg-slate-50 font-sans antialiased flex h-screen overflow-hidden text-slate-800">
+<body class="admin-workspace">
     <?php echo admin_sidebar($pdo, 'courses'); ?>
 
-    <main class="flex-1 flex flex-col overflow-y-auto">
+    <main class="admin-main flex-1 flex flex-col overflow-y-auto">
         <header class="admin-header flex items-center justify-between px-8 sticky top-0 z-10">
             <div>
                 <div class="text-sm font-black text-blue-600 uppercase tracking-widest">Courses</div>
-                <h2 class="text-2xl font-black text-slate-950">Manage Courses</h2>
+                <h1 class="text-2xl font-black text-slate-950">Manage Courses</h1>
             </div>
             <a href="add_course" class="admin-btn-primary">Add New Course</a>
         </header>
 
-        <div class="p-8">
+        <div class="admin-content">
             <?php if($error): ?>
                 <div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6"><?php echo h($error); ?></div>
             <?php endif; ?>
