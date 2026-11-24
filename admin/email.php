@@ -12,8 +12,9 @@ $form = [
     'cta_text' => '',
     'cta_url' => rtrim(site_base_url(), '/') . '/billing',
     'audience' => 'all',
-    'test_email' => app_secret('SMTP_FROM_EMAIL') ?: 'nectradigital3@gmail.com',
+    'test_email' => platform_setting($pdo, 'email_test_address', '') ?: (app_secret('SMTP_FROM_EMAIL') ?: 'nectradigital3@gmail.com'),
 ];
+$preview = null;
 
 $template = (string)($_GET['template'] ?? '');
 if ($template === 'offer') {
@@ -47,19 +48,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $form['audience'] = array_key_exists($_POST['audience'] ?? '', email_audiences()) ? $_POST['audience'] : 'all';
     $ctaValid = $form['cta_url'] === '' || preg_match('#^https://#i', $form['cta_url']);
 
-    if (in_array($action, ['send_test', 'create_campaign'], true)) {
+    if (in_array($action, ['send_test', 'create_campaign', 'preview'], true)) {
         if ($form['subject'] === '' || $form['heading'] === '' || $form['body'] === '') {
             $error = 'Subject, heading, and message are required.';
         } elseif (!$ctaValid) {
             $error = 'Button link must start with https://';
+        } elseif ($action === 'preview') {
+            $preview = render_campaign_mail($form, 'Rahul Sharma', 0);
         } elseif ($action === 'send_test') {
             $testEmail = filter_var($form['test_email'], FILTER_VALIDATE_EMAIL);
             if (!$testEmail) {
                 $error = 'Enter a valid test email address.';
             } elseif (send_campaign_mail($form, $testEmail, (string)($_SESSION['admin_username'] ?? 'Admin'), 0)) {
-                $success = 'Test email sent to ' . $testEmail . '. Check the inbox, then send the campaign.';
+                update_platform_setting($pdo, 'email_test_address', $testEmail);
+                $success = 'Test email sent to ' . $testEmail . '. Check the inbox (and the Promotions or Spam tab), then send the campaign.';
+                if (strcasecmp($testEmail, smtp_config()['from_email']) === 0) {
+                    $success .= ' Gmail files mail you send to yourself under Sent / All Mail, not the inbox. Use a different address to see it as a student would.';
+                }
             } else {
-                $error = 'Test email could not be sent. Check the Gmail app password.';
+                $error = 'Test email could not be sent: ' . (smtp_last_error() ?: 'unknown error') ;
             }
         } elseif (empty($_POST['confirm_send'])) {
             $error = 'Tick the confirmation box before sending to students.';
@@ -68,14 +75,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($created['total'] === 0) {
                 $error = 'No students match this audience.';
             } else {
-                $sentNow = process_email_queue($pdo, 8);
-                $success = 'Campaign queued for ' . $created['total'] . ' students. ' . $sentNow . ' sent now; the rest go out automatically in small batches.';
+                $sentNow = process_email_queue($pdo, EMAIL_BATCH_SIZE);
+                $left = $created['total'] - $sentNow;
+                if ($sentNow === 0) {
+                    $error = 'Campaign saved for ' . $created['total'] . ' students, but the first batch failed: ' . (smtp_last_error() ?: 'unknown error') . '. It will retry automatically.';
+                } else {
+                    $success = 'Campaign started: ' . $sentNow . ' of ' . $created['total'] . ' emails sent now.' . ($left > 0 ? ' The remaining ' . $left . ' go out automatically every few minutes.' : '');
+                }
                 $form['subject'] = $form['heading'] = $form['body'] = $form['cta_text'] = '';
             }
         }
     } elseif ($action === 'process_now') {
-        $sentNow = process_email_queue($pdo, 15);
-        $success = $sentNow . ' emails sent in this batch.';
+        $sentNow = process_email_queue($pdo, 25);
+        if ($sentNow === 0 && smtp_last_error() !== '') {
+            $error = 'No emails were sent: ' . smtp_last_error();
+        } else {
+            $success = $sentNow . ' emails sent in this batch.';
+        }
+    } elseif ($action === 'retry_failed') {
+        $retried = email_retry_failed($pdo, post_int('campaign_id'));
+        $sentNow = $retried > 0 ? process_email_queue($pdo, EMAIL_BATCH_SIZE) : 0;
+        $success = $retried . ' failed emails queued again; ' . $sentNow . ' sent now.';
     } elseif ($action === 'cancel_campaign') {
         $pdo->prepare("UPDATE email_campaigns SET status = 'cancelled', finished_at = NOW() WHERE id = :id AND status = 'sending'")->execute(['id' => post_int('campaign_id')]);
         $success = 'Campaign stopped. Emails already sent cannot be recalled.';
@@ -95,6 +115,8 @@ $queued = (int)$pdo->query("SELECT COUNT(*) FROM email_queue q JOIN email_campai
 $sentToday = email_sent_today($pdo);
 $dailyCap = email_daily_cap($pdo);
 $smtpReady = smtp_config()['password'] !== '';
+$lastError = platform_setting($pdo, 'email_last_error', '');
+$istTime = static fn(?string $utc): string => $utc ? (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('M j, Y g:i A') . ' IST' : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -170,8 +192,18 @@ $smtpReady = smtp_config()['password'] !== '';
                         <label class="admin-field"><span>Test email address</span>
                             <input name="test_email" type="email" value="<?php echo h($form['test_email']); ?>" class="admin-input">
                         </label>
-                        <button name="action" value="send_test" class="admin-btn-dark">Send test email</button>
+                        <p class="text-xs text-slate-500">Tip: Gmail keeps mail sent to <?php echo h(smtp_config()['from_email']); ?> itself under Sent / All Mail. Use another address to see it in an inbox.</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button name="action" value="preview" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 hover:bg-slate-100">Preview</button>
+                            <button name="action" value="send_test" class="admin-btn-dark">Send test email</button>
+                        </div>
                     </div>
+                    <?php if ($preview): ?>
+                        <div class="rounded-lg border border-slate-200 overflow-hidden" id="preview">
+                            <div class="bg-slate-100 px-4 py-2 text-xs text-slate-600"><strong>Subject:</strong> <?php echo h($preview['subject']); ?> &middot; shown for a student named Rahul</div>
+                            <iframe title="Email preview" sandbox="" srcdoc="<?php echo h($preview['html']); ?>" class="w-full bg-white" style="height:620px;border:0"></iframe>
+                        </div>
+                    <?php endif; ?>
                     <label class="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">
                         <input type="checkbox" name="confirm_send" value="1" class="w-5 h-5"> I checked the test email. Send this to the selected students.
                     </label>
@@ -181,8 +213,12 @@ $smtpReady = smtp_config()['password'] !== '';
                 <aside class="space-y-6">
                     <div class="bg-white rounded-xl border border-gray-200 p-6 text-sm text-slate-600 space-y-2">
                         <h3 class="text-lg font-black text-slate-900">How sending works</h3>
-                        <p>Emails go out from your Gmail account in small batches of about <?php echo EMAIL_BATCH_SIZE; ?> per minute while the site has visitors, up to the daily limit below. Gmail allows roughly 500 emails a day.</p>
+                        <p>Emails go out from your Gmail account in batches of <?php echo EMAIL_BATCH_SIZE; ?> every few minutes, up to the daily limit below. Gmail allows roughly 500 emails a day.</p>
                         <p>Only verified, active students who have not unsubscribed receive campaigns. Every email has an unsubscribe link.</p>
+                        <p>A failed email is retried up to <?php echo EMAIL_MAX_ATTEMPTS; ?> times before it is marked failed.</p>
+                        <?php if ($lastError !== ''): ?>
+                            <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700"><strong>Last sending problem:</strong> <?php echo h($lastError); ?></div>
+                        <?php endif; ?>
                         <?php if ($queued > 0): ?>
                             <form method="POST" action="email"><?php echo csrf_field(); ?><input type="hidden" name="action" value="process_now"><button class="admin-btn-dark mt-2">Send next batch now</button></form>
                         <?php endif; ?>
@@ -206,11 +242,14 @@ $smtpReady = smtp_config()['password'] !== '';
                         <tbody class="divide-y divide-gray-100">
                             <?php foreach ($campaigns as $campaign): ?>
                                 <tr>
-                                    <td class="p-4"><div class="font-bold"><?php echo h($campaign['subject']); ?></div><div class="text-xs text-slate-500"><?php echo h(date('M j, Y g:i A', strtotime((string)$campaign['created_at']))); ?></div></td>
+                                    <td class="p-4"><div class="font-bold"><?php echo h($campaign['subject']); ?></div><div class="text-xs text-slate-500"><?php echo h($istTime((string)$campaign['created_at'])); ?></div></td>
                                     <td class="p-4"><?php echo h(email_audiences()[$campaign['audience']] ?? $campaign['audience']); ?></td>
                                     <td class="p-4"><?php echo (int)$campaign['sent']; ?> / <?php echo (int)$campaign['total']; ?> sent<?php if ((int)$campaign['failed'] > 0): ?> <span class="text-red-600">&middot; <?php echo (int)$campaign['failed']; ?> failed</span><?php endif; ?></td>
                                     <td class="p-4"><span class="uppercase text-xs font-black"><?php echo h($campaign['status']); ?></span></td>
                                     <td class="p-4 text-right">
+                                        <?php if ((int)$campaign['failed'] > 0 && $campaign['status'] !== 'cancelled'): ?>
+                                            <form method="POST" action="email" class="mb-1"><?php echo csrf_field(); ?><input type="hidden" name="action" value="retry_failed"><input type="hidden" name="campaign_id" value="<?php echo (int)$campaign['id']; ?>"><button class="text-xs font-bold text-blue-600 hover:underline">Retry failed</button></form>
+                                        <?php endif; ?>
                                         <?php if ($campaign['status'] === 'sending'): ?>
                                             <form method="POST" action="email" onsubmit="return confirm('Stop this campaign?');"><?php echo csrf_field(); ?><input type="hidden" name="action" value="cancel_campaign"><input type="hidden" name="campaign_id" value="<?php echo (int)$campaign['id']; ?>"><button class="text-xs font-bold text-red-600 hover:underline">Stop</button></form>
                                         <?php endif; ?>

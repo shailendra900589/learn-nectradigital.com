@@ -153,42 +153,105 @@ function smtp_command($socket, string $command, array $okCodes): string
     return $response;
 }
 
+function smtp_last_error(?string $set = null): string
+{
+    static $last = '';
+    if ($set !== null) {
+        $last = $set;
+    }
+    return $last;
+}
+
+function smtp_open(array $config)
+{
+    $socket = @stream_socket_client('tcp://' . $config['host'] . ':' . $config['port'], $errno, $errstr, 20, STREAM_CLIENT_CONNECT);
+    if (!$socket) {
+        throw new RuntimeException('Could not connect to ' . $config['host'] . ':' . $config['port'] . ' (' . $errstr . ')');
+    }
+    stream_set_timeout($socket, 25);
+    $greeting = smtp_read($socket);
+    if ((int)substr($greeting, 0, 3) !== 220) {
+        fclose($socket);
+        throw new RuntimeException('SMTP greeting failed: ' . trim($greeting));
+    }
+    smtp_command($socket, 'EHLO ' . $config['helo_domain'], [250]);
+    smtp_command($socket, 'STARTTLS', [220]);
+    if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+        fclose($socket);
+        throw new RuntimeException('SMTP TLS failed.');
+    }
+    smtp_command($socket, 'EHLO ' . $config['helo_domain'], [250]);
+    smtp_command($socket, 'AUTH LOGIN', [334]);
+    smtp_command($socket, base64_encode($config['username']), [334]);
+    try {
+        smtp_command($socket, base64_encode($config['password']), [235]);
+    } catch (RuntimeException $e) {
+        fclose($socket);
+        throw new RuntimeException('Gmail rejected the login. Check SMTP_USER and the 16-character app password.');
+    }
+    return $socket;
+}
+
+/**
+ * Keeps one authenticated SMTP connection open across several send_smtp_mail() calls
+ * (campaign batches). Call smtp_keepalive(false) to close it.
+ */
+function smtp_keepalive(?bool $enable = null)
+{
+    static $enabled = false;
+    static $socket = null;
+    if ($enable === true) {
+        $enabled = true;
+    } elseif ($enable === false) {
+        $enabled = false;
+        if ($socket) {
+            @fwrite($socket, "QUIT\r\n");
+            @fclose($socket);
+        }
+        $socket = null;
+        return null;
+    }
+    if (func_num_args() === 2) {
+        $socket = func_get_arg(1);
+    }
+    return $enabled ? $socket : false;
+}
+
 function send_smtp_mail(string $to, string $subject, string $html, string $text = '', array $extraHeaders = []): bool
 {
+    smtp_last_error('');
     $config = smtp_config();
     if ($config['password'] === '') {
+        smtp_last_error('Gmail sending is not configured (SMTP_PASS is empty).');
         error_log('SMTP authentication is not configured.');
         return false;
     }
-    $socket = @stream_socket_client(
-        'tcp://' . $config['host'] . ':' . $config['port'],
-        $errno,
-        $errstr,
-        20,
-        STREAM_CLIENT_CONNECT
-    );
-
-    if (!$socket) {
-        error_log('SMTP connect failed: ' . $errstr);
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        smtp_last_error('Invalid recipient address.');
         return false;
     }
 
+    $kept = smtp_keepalive();
+    $reuse = is_resource($kept);
+    $socket = null;
     try {
-        stream_set_timeout($socket, 20);
-        $greeting = smtp_read($socket);
-        if ((int)substr($greeting, 0, 3) !== 220) {
-            throw new RuntimeException('SMTP greeting failed: ' . trim($greeting));
+        if ($reuse) {
+            $socket = $kept;
+            try {
+                smtp_command($socket, 'RSET', [250]);
+            } catch (Throwable $e) {
+                @fclose($socket);
+                $reuse = false;
+                $socket = null;
+            }
         }
-
-        smtp_command($socket, 'EHLO ' . $config['helo_domain'], [250]);
-        smtp_command($socket, 'STARTTLS', [220]);
-        if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
-            throw new RuntimeException('SMTP TLS failed.');
+        if (!$socket) {
+            $socket = smtp_open($config);
+            if ($kept !== false) {
+                smtp_keepalive(null, $socket);
+                $reuse = true;
+            }
         }
-        smtp_command($socket, 'EHLO ' . $config['helo_domain'], [250]);
-        smtp_command($socket, 'AUTH LOGIN', [334]);
-        smtp_command($socket, base64_encode($config['username']), [334]);
-        smtp_command($socket, base64_encode($config['password']), [235]);
         smtp_command($socket, 'MAIL FROM:<' . $config['from_email'] . '>', [250]);
         smtp_command($socket, 'RCPT TO:<' . $to . '>', [250, 251]);
         smtp_command($socket, 'DATA', [354]);
@@ -210,20 +273,28 @@ function send_smtp_mail(string $to, string $subject, string $html, string $text 
         }
         $text = $text !== '' ? $text : strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $html));
         $body = implode("\r\n", $headers) . "\r\n\r\n";
-        $body .= '--' . $boundary . "\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" . $text . "\r\n";
-        $body .= '--' . $boundary . "\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" . $html . "\r\n";
+        $body .= '--' . $boundary . "\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($text), 76, "\r\n");
+        $body .= '--' . $boundary . "\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($html), 76, "\r\n");
         $body .= '--' . $boundary . "--\r\n";
-        fwrite($socket, preg_replace('/^\./m', '..', $body) . "\r\n.\r\n");
+        fwrite($socket, $body . "\r\n.\r\n");
         $dataResponse = smtp_read($socket);
         if ((int)substr($dataResponse, 0, 3) !== 250) {
-            throw new RuntimeException('SMTP DATA failed: ' . trim($dataResponse));
+            throw new RuntimeException('Gmail did not accept the message: ' . trim($dataResponse));
         }
-        smtp_command($socket, 'QUIT', [221]);
-        fclose($socket);
+        if (!$reuse) {
+            smtp_command($socket, 'QUIT', [221]);
+            fclose($socket);
+        }
         return true;
     } catch (Throwable $e) {
+        smtp_last_error($e->getMessage());
         error_log('SMTP mail failed: ' . $e->getMessage());
-        fclose($socket);
+        if ($socket) {
+            @fclose($socket);
+        }
+        if ($reuse) {
+            smtp_keepalive(null, null);
+        }
         return false;
     }
 }

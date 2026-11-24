@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 const EMAIL_DAILY_CAP_DEFAULT = 450;
 const EMAIL_BATCH_SIZE = 12;
+const EMAIL_MAX_ATTEMPTS = 3;
 
 function email_audiences(): array
 {
@@ -74,11 +75,11 @@ function create_email_campaign(PDO $pdo, array $data, string $audience, int $adm
     return ['id' => $campaignId, 'total' => $total];
 }
 
-function send_campaign_mail(array $campaign, string $email, string $name, int $studentId): bool
+function render_campaign_mail(array $campaign, string $name, int $studentId): array
 {
     $first = trim(explode(' ', trim($name))[0] ?? '') ?: 'there';
     $replace = ['{name}' => $first, '{first_name}' => $first];
-    $unsubscribe = $studentId > 0 ? email_unsubscribe_url($studentId) : rtrim(site_base_url(), '/');
+    $unsubscribe = $studentId > 0 ? email_unsubscribe_url($studentId) : rtrim(site_base_url(), '/') . '/unsubscribe';
     $footer = 'You are receiving this because you have a Learn.Nectra account. <a href="' . h($unsubscribe) . '" style="color:#64748b">Unsubscribe</a>';
     $html = email_layout(
         strtr((string)$campaign['heading'], $replace),
@@ -90,11 +91,35 @@ function send_campaign_mail(array $campaign, string $email, string $name, int $s
     $text = strtr((string)$campaign['heading'], $replace) . "\n\n" . strtr((string)$campaign['body'], $replace)
         . (!empty($campaign['cta_url']) ? "\n\n" . $campaign['cta_text'] . ': ' . $campaign['cta_url'] : '')
         . "\n\nUnsubscribe: " . $unsubscribe;
-    return send_smtp_mail($email, strtr((string)$campaign['subject'], $replace), $html, $text, [
-        'List-Unsubscribe: <' . $unsubscribe . '>',
-        'List-Unsubscribe-Post: List-Unsubscribe=One-Click',
-        'Precedence: bulk',
-    ]);
+    return [
+        'subject' => strtr((string)$campaign['subject'], $replace),
+        'html' => $html,
+        'text' => $text,
+        'unsubscribe' => $unsubscribe,
+    ];
+}
+
+function send_campaign_mail(array $campaign, string $email, string $name, int $studentId): bool
+{
+    $mail = render_campaign_mail($campaign, $name, $studentId);
+    $headers = ['Precedence: bulk'];
+    if ($studentId > 0) {
+        $headers[] = 'List-Unsubscribe: <' . $mail['unsubscribe'] . '>';
+        $headers[] = 'List-Unsubscribe-Post: List-Unsubscribe=One-Click';
+    }
+    return send_smtp_mail($email, $mail['subject'], $mail['html'], $mail['text'], $headers);
+}
+
+function email_retry_failed(PDO $pdo, int $campaignId): int
+{
+    $stmt = $pdo->prepare("UPDATE email_queue SET status = 'queued', attempts = 0 WHERE campaign_id = :id AND status = 'failed'");
+    $stmt->execute(['id' => $campaignId]);
+    $count = $stmt->rowCount();
+    if ($count > 0) {
+        $pdo->prepare("UPDATE email_campaigns SET status = 'sending', failed = GREATEST(0, failed - :n), finished_at = NULL WHERE id = :id AND status <> 'cancelled'")
+            ->execute(['n' => $count, 'id' => $campaignId]);
+    }
+    return $count;
 }
 
 function process_email_queue(PDO $pdo, int $limit = EMAIL_BATCH_SIZE): int
@@ -105,6 +130,9 @@ function process_email_queue(PDO $pdo, int $limit = EMAIL_BATCH_SIZE): int
         return 0;
     }
     $sent = 0;
+    $failedInRow = 0;
+    @set_time_limit(180);
+    smtp_keepalive(true);
     try {
         $room = email_daily_cap($pdo) - email_sent_today($pdo);
         $limit = min($limit, $room);
@@ -112,7 +140,7 @@ function process_email_queue(PDO $pdo, int $limit = EMAIL_BATCH_SIZE): int
             return 0;
         }
         $rows = $pdo->query("
-            SELECT q.id, q.campaign_id, q.student_id, q.email, s.name, s.marketing_opt_out
+            SELECT q.id, q.campaign_id, q.student_id, q.email, q.attempts, s.name, s.marketing_opt_out
             FROM email_queue q
             JOIN email_campaigns c ON c.id = q.campaign_id AND c.status = 'sending'
             LEFT JOIN students s ON s.id = q.student_id
@@ -133,11 +161,22 @@ function process_email_queue(PDO $pdo, int $limit = EMAIL_BATCH_SIZE): int
                 continue;
             }
             $ok = send_campaign_mail($campaigns[$cid], (string)$row['email'], (string)$row['name'], (int)$row['student_id']);
-            $pdo->prepare("UPDATE email_queue SET attempts = attempts + 1, status = :status, sent_at = IF(:ok = 1, NOW(), sent_at) WHERE id = :id")
-                ->execute(['status' => $ok ? 'sent' : 'failed', 'ok' => $ok ? 1 : 0, 'id' => $row['id']]);
-            $pdo->prepare('UPDATE email_campaigns SET ' . ($ok ? 'sent = sent + 1' : 'failed = failed + 1') . ' WHERE id = :id')->execute(['id' => $cid]);
+            $attempts = (int)$row['attempts'] + 1;
+            $status = $ok ? 'sent' : ($attempts >= EMAIL_MAX_ATTEMPTS ? 'failed' : 'queued');
+            $pdo->prepare("UPDATE email_queue SET attempts = :attempts, status = :status, sent_at = IF(:ok = 1, NOW(), sent_at) WHERE id = :id")
+                ->execute(['attempts' => $attempts, 'status' => $status, 'ok' => $ok ? 1 : 0, 'id' => $row['id']]);
             if ($ok) {
+                $pdo->prepare('UPDATE email_campaigns SET sent = sent + 1 WHERE id = :id')->execute(['id' => $cid]);
                 $sent++;
+                $failedInRow = 0;
+                continue;
+            }
+            update_platform_setting($pdo, 'email_last_error', date('Y-m-d H:i:s') . ' UTC | ' . $row['email'] . ' | ' . substr(smtp_last_error(), 0, 300));
+            if ($status === 'failed') {
+                $pdo->prepare('UPDATE email_campaigns SET failed = failed + 1 WHERE id = :id')->execute(['id' => $cid]);
+            }
+            if (++$failedInRow >= 3) {
+                break;
             }
         }
         $pdo->exec("
@@ -149,6 +188,7 @@ function process_email_queue(PDO $pdo, int $limit = EMAIL_BATCH_SIZE): int
     } catch (Throwable $e) {
         error_log('Email queue failed: ' . $e->getMessage());
     } finally {
+        smtp_keepalive(false);
         flock($lock, LOCK_UN);
         fclose($lock);
     }
