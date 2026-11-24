@@ -14,10 +14,15 @@ require_once __DIR__ . '/course_rank.php';
 */
 
 $localConfig = [];
-if (PHP_OS_FAMILY === 'Windows' && realpath(dirname(__DIR__, 2)) === realpath('C:/xampp/htdocs')) {
-    $configPath = dirname(__DIR__, 3) . '/nectra-learning.local.php';
-    if (is_file($configPath)) {
-        $localConfig = require $configPath;
+$configDir = dirname(__DIR__, 2);
+if (PHP_OS_FAMILY === 'Windows' && realpath($configDir) === realpath('C:/xampp/htdocs')) {
+    $configDir = dirname(__DIR__, 3);
+}
+$configPath = $configDir . '/nectra-learning.local.php';
+if (is_file($configPath)) {
+    $loadedConfig = require $configPath;
+    if (is_array($loadedConfig)) {
+        $localConfig = $loadedConfig;
     }
 }
 $host = getenv('DB_HOST') ?: ($localConfig['DB_HOST'] ?? 'localhost');
