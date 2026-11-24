@@ -79,5 +79,24 @@ function admin_sidebar(PDO $pdo, string $active): string
 function admin_styles(): string
 {
     $css = protected_asset_url('assets/css/admin-ui.css');
-    return '<link rel="stylesheet" href="../' . h($css) . '">';
+    $toast = <<<'JS'
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var notice = document.querySelector('.admin-content [class*="border-l-4"][class*="bg-green-50"]:not([role="status"]), .admin-content [class*="border-l-4"][class*="bg-red-50"]:not([role="status"])');
+    if (!notice || !notice.textContent.trim()) {
+        return;
+    }
+    var ok = notice.className.indexOf('bg-green-50') !== -1;
+    var toast = document.createElement('div');
+    toast.setAttribute('role', 'status');
+    toast.textContent = notice.textContent.trim();
+    toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;max-width:420px;padding:14px 18px;border-radius:12px;font:700 14px/1.4 system-ui,sans-serif;box-shadow:0 12px 32px rgba(15,23,42,.18);transition:opacity .4s;' +
+        (ok ? 'background:#ecfdf5;color:#065f46;border:1px solid #6ee7b7;' : 'background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;');
+    document.body.appendChild(toast);
+    setTimeout(function () { toast.style.opacity = '0'; }, 6000);
+    setTimeout(function () { toast.remove(); }, 6600);
+});
+</script>
+JS;
+    return '<link rel="stylesheet" href="../' . h($css) . '">' . $toast;
 }

@@ -6,9 +6,13 @@ require_admin();
 $error = '';
 $success = '';
 
+$flash = $_SESSION['admin_students_flash'] ?? null;
+unset($_SESSION['admin_students_flash']);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
     $action = $_POST['action'] ?? '';
+    $returnQuery = '';
 
     if ($action === 'settings') {
         update_platform_setting($pdo, 'plans_enabled', isset($_POST['plans_enabled']) ? '1' : '0');
@@ -66,6 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'id' => $planId,
                     ]);
                     $success = 'Plan updated.';
+                    $returnQuery = '?edit_plan=' . $planId;
                 } else {
                     $stmt = $pdo->prepare("
                         INSERT INTO plans (name, slug, price, offer_price, offer_label, offer_ends_at, currency, duration_days, course_limit, description, features, ad_free, priority_support, downloadable_resources, certificate_access, is_active)
@@ -90,9 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'is_active' => isset($_POST['is_active']) ? 1 : 0,
                     ]);
                     $success = 'Plan created.';
+                    $returnQuery = '?edit_plan=' . (int)$pdo->lastInsertId();
                 }
             } catch (PDOException $e) {
                 $error = 'Plan could not be saved. Use a unique slug.';
+                $returnQuery = $planId > 0 ? '?edit_plan=' . $planId : '';
             }
         }
     }
@@ -149,7 +156,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $payment = $stmtPayment->fetch();
         if ($payment) {
             $alreadyApproved = $payment['status'] === 'approved';
-            $pdo->prepare("UPDATE payments SET status = :status, admin_note = :note WHERE id = :id")->execute(['status' => $status, 'note' => $note, 'id' => $paymentId]);
+            $pdo->prepare("UPDATE payments SET status = :status, admin_note = :note, paid_at = CASE WHEN :approved = 1 THEN COALESCE(paid_at, NOW()) ELSE paid_at END WHERE id = :id")
+                ->execute(['status' => $status, 'note' => $note, 'approved' => $status === 'approved' ? 1 : 0, 'id' => $paymentId]);
             if ($status === 'approved' && !$alreadyApproved && (int)$payment['plan_id'] > 0) {
                 $stmtPlan = $pdo->prepare("SELECT * FROM plans WHERE id = :id LIMIT 1");
                 $stmtPlan->execute(['id' => $payment['plan_id']]);
@@ -168,6 +176,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'Payment updated.';
         }
     }
+
+    if ($action === 'check_gateway') {
+        $stmtPayment = $pdo->prepare("SELECT gateway_order_id, status FROM payments WHERE id = :id AND method = 'razorpay' LIMIT 1");
+        $stmtPayment->execute(['id' => post_int('payment_id')]);
+        $payment = $stmtPayment->fetch();
+        if (!$payment || !$payment['gateway_order_id']) {
+            $error = 'This is not an online payment.';
+        } elseif ($payment['status'] === 'approved') {
+            $success = 'This payment is already approved.';
+        } else {
+            $gatewayPaymentId = razorpay_captured_payment_id((string)$payment['gateway_order_id']);
+            if ($gatewayPaymentId !== null && complete_gateway_payment($pdo, (string)$payment['gateway_order_id'], $gatewayPaymentId)) {
+                $success = 'Razorpay confirmed the payment. The package is active now.';
+            } else {
+                $error = 'Razorpay shows no completed payment for this order. Approve it manually only if you received the money another way.';
+            }
+        }
+    }
+
+    $anchors = ['settings' => 'plans', 'save_plan' => 'plan-form', 'update_student' => 'student-access', 'cancel_subscription' => 'student-access', 'payment_status' => 'payment-history', 'check_gateway' => 'payment-history'];
+    $anchor = $anchors[$action] ?? 'plans';
+    $_SESSION['admin_students_flash'] = ['ok' => $error === '', 'message' => $error !== '' ? $error : ($success ?: 'Saved.'), 'anchor' => $anchor];
+    redirect('students' . $returnQuery . '#' . $anchor);
+}
+
+function admin_students_flash(?array $flash, string $anchor): string
+{
+    if (!$flash || ($flash['anchor'] ?? '') !== $anchor) {
+        return '';
+    }
+    $class = $flash['ok'] ? 'bg-green-50 border-green-500 text-green-800' : 'bg-red-50 border-red-500 text-red-700';
+    return '<div role="status" class="mb-4 border-l-4 p-4 rounded-md font-bold ' . $class . '">' . h((string)$flash['message']) . '</div>';
 }
 
 $editPlan = null;
@@ -197,8 +237,7 @@ $payments = $pdo->query("
     FROM payments pay
     LEFT JOIN students s ON s.id = pay.student_id
     LEFT JOIN plans p ON p.id = pay.plan_id
-    WHERE NOT (pay.method = 'razorpay' AND pay.status = 'requested')
-    ORDER BY FIELD(pay.status, 'paid', 'requested', 'approved', 'rejected', 'refunded'), pay.created_at DESC
+    ORDER BY (pay.status IN ('paid', 'requested') AND COALESCE(pay.method, '') <> 'razorpay') DESC, pay.created_at DESC, pay.id DESC
     LIMIT 80
 ")->fetchAll();
 $allCourses = $pdo->query("SELECT id, title FROM courses ORDER BY title ASC")->fetchAll();
@@ -237,11 +276,9 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
         </header>
 
         <div class="admin-content space-y-8">
-            <?php if($error): ?><div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md"><?php echo h($error); ?></div><?php endif; ?>
-            <?php if($success): ?><div class="bg-green-50 border-l-4 border-green-500 text-green-700 p-4 rounded-md"><?php echo h($success); ?></div><?php endif; ?>
-
             <section class="admin-plan-layout" id="plans">
                 <form method="POST" action="students" class="bg-white rounded-xl border border-gray-200 p-6">
+                    <?php echo admin_students_flash($flash, 'plans'); ?>
                     <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="settings">
                     <h3 class="text-lg font-black text-slate-900 mb-4">Plan Controls</h3>
@@ -254,7 +291,8 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                     <button class="mt-4 admin-btn-dark">Save Settings</button>
                 </form>
 
-                <form method="POST" action="students" class="bg-white rounded-xl border border-gray-200 p-6">
+                <form method="POST" action="students" id="plan-form" class="bg-white rounded-xl border border-gray-200 p-6 scroll-mt-28">
+                    <?php echo admin_students_flash($flash, 'plan-form'); ?>
                     <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="save_plan">
                     <input type="hidden" name="plan_id" value="<?php echo (int)$planForm['id']; ?>">
@@ -335,6 +373,7 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                 <div class="px-6 py-4 bg-slate-50 border-b border-gray-200">
                     <h3 class="font-black text-slate-900">Students Access Control</h3>
                 </div>
+                <?php if (($flash['anchor'] ?? '') === 'student-access'): ?><div class="px-6 pt-4"><?php echo admin_students_flash($flash, 'student-access'); ?></div><?php endif; ?>
                 <div class="overflow-x-auto max-h-[720px]">
                     <table class="w-full text-left text-sm">
                         <thead class="sticky top-0 bg-white text-xs uppercase text-slate-400 border-b border-gray-100"><tr><th class="p-4">Student</th><th class="p-4">Current Plan</th><th class="p-4">Controls</th><th class="p-4">Apply Plan</th><th class="p-4 text-right">Save</th></tr></thead>
@@ -414,6 +453,7 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                 <div class="px-6 py-4 bg-slate-50 border-b border-gray-200">
                     <h3 class="font-black text-slate-900">Payment History & Approvals</h3>
                 </div>
+                <?php if (($flash['anchor'] ?? '') === 'payment-history'): ?><div class="px-6 pt-4"><?php echo admin_students_flash($flash, 'payment-history'); ?></div><?php endif; ?>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-sm">
                         <thead class="text-xs uppercase text-slate-400 border-b border-gray-100"><tr><th class="p-4">Student</th><th class="p-4">Plan</th><th class="p-4">Payment</th><th class="p-4">Status</th><th class="p-4 text-right">Action</th></tr></thead>
@@ -422,9 +462,23 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                                 <tr>
                                         <td class="p-4"><div class="font-bold"><?php echo h($payment['student_name'] ?: 'Deleted user'); ?></div><div class="text-xs text-slate-500"><?php echo h($payment['student_email'] ?? ''); ?></div></td>
                                         <td class="p-4"><?php echo h($payment['plan_name'] ?: 'Plan'); ?></td>
-                                        <td class="p-4"><div class="font-black"><?php echo h($payment['currency']); ?> <?php echo number_format((float)$payment['amount'], 2); ?></div><div class="text-xs text-slate-500"><?php echo h($payment['transaction_ref'] ?: 'No reference'); ?></div></td>
-                                        <td class="p-4"><span class="uppercase text-xs font-black"><?php echo h($payment['status']); ?></span></td>
+                                        <?php
+                                        $isOnline = ($payment['method'] ?? '') === 'razorpay';
+                                        $statusLabels = ['approved' => ['Approved', 'bg-green-50 text-green-700 border-green-200'], 'paid' => ['Paid - review', 'bg-amber-50 text-amber-700 border-amber-200'], 'requested' => [$isOnline ? 'Not completed' : 'Pending review', $isOnline ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-amber-50 text-amber-700 border-amber-200'], 'rejected' => ['Rejected', 'bg-red-50 text-red-700 border-red-200'], 'refunded' => ['Refunded', 'bg-purple-50 text-purple-700 border-purple-200']];
+                                        [$statusText, $statusClass] = $statusLabels[$payment['status']] ?? [ucfirst((string)$payment['status']), 'bg-slate-100 text-slate-600 border-slate-200'];
+                                        $reference = $payment['gateway_payment_id'] ?: ($payment['transaction_ref'] ?: ($payment['gateway_order_id'] ?: 'No reference'));
+                                        ?>
+                                        <td class="p-4"><div class="font-black"><?php echo h($payment['currency']); ?> <?php echo number_format((float)$payment['amount'], 2); ?></div><div class="text-xs text-slate-500"><?php echo $isOnline ? 'Razorpay' : h(ucfirst((string)($payment['method'] ?: 'Manual'))); ?> &middot; <?php echo h((string)$reference); ?></div><div class="text-xs text-slate-400"><?php echo h((new DateTimeImmutable((string)$payment['created_at'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('M j, Y g:i A')); ?> IST</div></td>
+                                        <td class="p-4"><span class="inline-block border rounded-full px-2.5 py-1 text-xs font-black <?php echo $statusClass; ?>"><?php echo h($statusText); ?></span></td>
                                         <td class="p-4 text-right">
+                                    <?php if ($isOnline && $payment['status'] === 'requested' && $payment['gateway_order_id']): ?>
+                                    <form method="POST" action="students" class="mb-2">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="action" value="check_gateway">
+                                        <input type="hidden" name="payment_id" value="<?php echo (int)$payment['id']; ?>">
+                                        <button class="border border-blue-600 text-blue-700 hover:bg-blue-50 font-bold px-3 py-1.5 rounded-lg text-xs">Check Razorpay</button>
+                                    </form>
+                                    <?php endif; ?>
                                     <form method="POST" action="students">
                                         <?php echo csrf_field(); ?>
                                         <input type="hidden" name="action" value="payment_status">
