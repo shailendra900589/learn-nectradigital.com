@@ -69,6 +69,29 @@
                 show(order.message || 'Error', false);
                 return;
             }
+            var finished = false;
+            var poller = null;
+            function stopPolling() {
+                if (poller) {
+                    clearInterval(poller);
+                    poller = null;
+                }
+            }
+            // UPI QR payments can succeed without the checkout handler firing, so ask the server too.
+            function checkPaid() {
+                return post({ action: 'order_status', order_id: order.order_id }).then(function (state) {
+                    if (state.status === 'success' && state.paid && !finished) {
+                        finished = true;
+                        stopPolling();
+                        try { checkout.close(); } catch (e) {}
+                        show(boot.text.success, true);
+                        window.location.reload();
+                    }
+                    return !!(state && state.paid);
+                }).catch(function () {
+                    return false;
+                });
+            }
             var checkout = new window.Razorpay({
                 key: order.key,
                 order_id: order.order_id,
@@ -79,6 +102,8 @@
                 prefill: order.prefill,
                 theme: { color: '#04AA6D' },
                 handler: function (result) {
+                    finished = true;
+                    stopPolling();
                     show(boot.text.success, true);
                     post({
                         action: 'verify_payment',
@@ -96,12 +121,32 @@
                 },
                 modal: {
                     ondismiss: function () {
-                        button.disabled = false;
-                        show(boot.text.cancelled, false);
+                        stopPolling();
+                        if (finished) {
+                            return;
+                        }
+                        checkPaid().then(function (paid) {
+                            if (!paid) {
+                                button.disabled = false;
+                                show(boot.text.cancelled, false);
+                            }
+                        });
                     }
                 }
             });
+            checkout.on('payment.failed', function (response) {
+                var reason = response && response.error && response.error.description;
+                show(boot.text.failed + ' ' + (reason || boot.text.cancelled), false);
+            });
             checkout.open();
+            var checks = 0;
+            poller = setInterval(function () {
+                if (++checks > 110) {
+                    stopPolling();
+                    return;
+                }
+                checkPaid();
+            }, 8000);
         }).catch(function () {
             button.disabled = false;
             show(boot.text.cancelled, false);

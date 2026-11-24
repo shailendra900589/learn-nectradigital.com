@@ -93,6 +93,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         json_response(['status' => 'success']);
     }
 
+    if ($action === 'order_status') {
+        enforce_request_budget('billing-status', 150, 900);
+        $orderId = substr(trim((string)($_POST['order_id'] ?? '')), 0, 64);
+        $stmt = $pdo->prepare("SELECT status FROM payments WHERE gateway_order_id = :order_id AND student_id = :student_id LIMIT 1");
+        $stmt->execute(['order_id' => $orderId, 'student_id' => $studentId]);
+        $current = $stmt->fetchColumn();
+        if ($current === false) {
+            json_response(['status' => 'error', 'message' => localize_text('Selected plan is not available.')], 404);
+        }
+        if ($current === 'approved') {
+            json_response(['status' => 'success', 'paid' => true]);
+        }
+        $paymentId = razorpay_captured_payment_id($orderId);
+        $paid = $paymentId !== null && complete_gateway_payment($pdo, $orderId, $paymentId);
+        json_response(['status' => 'success', 'paid' => $paid]);
+    }
+
     if ($action === 'claim_course') {
         $courseId = post_int('course_id');
         $result = claim_course_slot($pdo, $studentId, $courseId);
@@ -199,6 +216,7 @@ $billingBoot = json_encode([
         'opening' => localize_text('Opening secure payment...'),
         'success' => localize_text('Payment successful. Activating your package...'),
         'cancelled' => localize_text('Payment was cancelled.'),
+        'failed' => localize_text('Payment failed:'),
         'choose' => localize_text('Please choose a course first.'),
     ],
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);

@@ -41,6 +41,32 @@ function razorpay_create_order(int $amountPaise, string $receipt, array $notes):
     return $order;
 }
 
+function razorpay_captured_payment_id(string $orderId): ?string
+{
+    if (!razorpay_enabled() || !preg_match('/^order_[A-Za-z0-9]+$/', $orderId)) {
+        return null;
+    }
+    $ch = curl_init('https://api.razorpay.com/v1/orders/' . $orderId . '/payments');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_USERPWD => razorpay_key_id() . ':' . app_secret('RAZORPAY_KEY_SECRET'),
+    ]);
+    $body = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $result = is_string($body) ? json_decode($body, true) : null;
+    if ($status !== 200 || !is_array($result)) {
+        return null;
+    }
+    foreach ((array)($result['items'] ?? []) as $payment) {
+        if (($payment['status'] ?? '') === 'captured' && !empty($payment['id'])) {
+            return (string)$payment['id'];
+        }
+    }
+    return null;
+}
+
 function razorpay_payment_signature_valid(string $orderId, string $paymentId, string $signature): bool
 {
     $secret = app_secret('RAZORPAY_KEY_SECRET');
