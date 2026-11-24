@@ -493,30 +493,64 @@
        ═════════════════════════════════════════════════════════════════════ */
 
     (function darkMode() {
-      var STORAGE_KEY = 'nectra-dark-mode';
+      var STORAGE_KEY = 'nectra-theme';
+
+      // Tailwind opacity variants (bg-slate-50/70) and hover: variants are separate classes,
+      // so match class tokens by prefix and keep light-only islands untouched.
+      var KEEP_LIGHT = ':not(:where(figure.bg-white,.nd-visual,#mobileMenu,.prompt-lab,.prompt-keep,.prompt-models,.prompt-pieces,.prompt-bubble) *)';
+      function cls(token) {
+        return ['[class~="' + token + '"]', '[class^="' + token + '/"]', '[class*=" ' + token + '/"]'].map(function (s) {
+          return 'body.dark-mode ' + s + KEEP_LIGHT;
+        }).join(',');
+      }
+      function rule(tokens, decl) {
+        return tokens.map(cls).join(',') + '{' + decl + '}';
+      }
+      function hoverRule(tokens, decl) {
+        return tokens.map(function (t) {
+          return 'body.dark-mode [class*="hover:' + t + '"]:hover' + KEEP_LIGHT;
+        }).join(',') + '{' + decl + '}';
+      }
+      var tints = {
+        red: ['239,68,68', '#fca5a5'], orange: ['249,115,22', '#fdba74'], amber: ['245,158,11', '#fcd34d'],
+        yellow: ['234,179,8', '#fde047'], lime: ['132,204,22', '#bef264'], green: ['34,197,94', '#86efac'],
+        emerald: ['16,185,129', '#6ee7b7'], teal: ['20,184,166', '#5eead4'], cyan: ['6,182,212', '#67e8f9'],
+        sky: ['14,165,233', '#7dd3fc'], blue: ['59,130,246', '#93c5fd'], indigo: ['99,102,241', '#a5b4fc'],
+        violet: ['139,92,246', '#c4b5fd'], purple: ['168,85,247', '#d8b4fe'], fuchsia: ['217,70,239', '#f0abfc'],
+        pink: ['236,72,153', '#f9a8d4'], rose: ['244,63,94', '#fda4af']
+      };
+      var tintCss = '';
+      Object.keys(tints).forEach(function (c) {
+        var rgb = tints[c][0], light = tints[c][1];
+        tintCss +=
+          rule(['bg-' + c + '-50', 'bg-' + c + '-100'], 'background-color:rgba(' + rgb + ',.14)!important;') +
+          rule(['bg-' + c + '-200'], 'background-color:rgba(' + rgb + ',.24)!important;') +
+          rule(['border-' + c + '-100', 'border-' + c + '-200', 'border-' + c + '-300'], 'border-color:rgba(' + rgb + ',.35)!important;') +
+          rule(['text-' + c + '-600', 'text-' + c + '-700', 'text-' + c + '-800', 'text-' + c + '-900', 'text-' + c + '-950'], 'color:' + light + '!important;') +
+          hoverRule(['bg-' + c + '-50', 'bg-' + c + '-100'], 'background-color:rgba(' + rgb + ',.18)!important;') +
+          hoverRule(['text-' + c + '-6', 'text-' + c + '-7', 'text-' + c + '-8', 'text-' + c + '-9'], 'color:' + light + '!important;');
+      });
 
       // Inject dark-mode stylesheet
       var style = document.createElement('style');
       style.id = 'nectra-dark-styles';
       style.textContent =
         'body.dark-mode{background:#0f172a!important;color:#e2e8f0!important;}' +
+        rule(['bg-white', 'bg-gray-50', 'bg-slate-100', 'bg-gray-100'], 'background-color:#1e293b!important;') +
+        rule(['bg-slate-50'], 'background-color:#0f172a!important;') +
+        rule(['bg-slate-200', 'bg-gray-200'], 'background-color:#334155!important;') +
+        rule(['text-slate-900', 'text-gray-900', 'text-black'], 'color:#f1f5f9!important;') +
+        rule(['text-slate-800', 'text-gray-800'], 'color:#e2e8f0!important;') +
+        rule(['text-slate-700', 'text-gray-700'], 'color:#cbd5e1!important;') +
+        rule(['text-slate-600', 'text-gray-600', 'text-slate-500', 'text-gray-500'], 'color:#a3b1c6!important;') +
+        rule(['border-slate-100', 'border-gray-100', 'border-slate-200', 'border-gray-200', 'border-slate-300', 'border-gray-300'], 'border-color:#334155!important;') +
+        'body.dark-mode [class*="divide-slate-"]>*+*,body.dark-mode [class*="divide-gray-"]>*+*{border-color:#334155!important;}' +
+        hoverRule(['bg-white', 'bg-slate-50', 'bg-gray-50', 'bg-slate-100', 'bg-gray-100'], 'background-color:#273449!important;') +
+        hoverRule(['text-slate-9', 'text-slate-8', 'text-gray-9', 'text-gray-8'], 'color:#f8fafc!important;') +
+        tintCss +
         'body.dark-mode header{background:rgba(15,23,42,.95)!important;border-color:#1e293b!important;}' +
-        'body.dark-mode .bg-white{background:#1e293b!important;}' +
         'body.dark-mode figure.bg-white{background:#ffffff!important;color:#0f172a!important;}' +
-        'body.dark-mode figure.bg-white .text-slate-800{color:#0f172a!important;}' +
-        'body.dark-mode figure.bg-white .text-slate-500{color:#475569!important;}' +
-        'body.dark-mode figure.bg-white .border-slate-200{border-color:#e2e8f0!important;}' +
-        'body.dark-mode figure.bg-white .border-slate-100{border-color:#f1f5f9!important;}' +
-        'body.dark-mode .bg-slate-50{background:#0f172a!important;}' +
-        'body.dark-mode .text-slate-900{color:#f1f5f9!important;}' +
-        'body.dark-mode .text-slate-800{color:#e2e8f0!important;}' +
-        'body.dark-mode .text-slate-700{color:#cbd5e1!important;}' +
-        'body.dark-mode .text-slate-600{color:#94a3b8!important;}' +
-        'body.dark-mode .text-slate-500{color:#64748b!important;}' +
-        'body.dark-mode .border-slate-200{border-color:#334155!important;}' +
-        'body.dark-mode .border-slate-100{border-color:#1e293b!important;}' +
         'body.dark-mode footer{background:#0f172a!important;border-color:#1e293b!important;}' +
-        'body.dark-mode .bg-slate-100{background:#1e293b!important;}' +
         'body.dark-mode input,body.dark-mode textarea{background:#1e293b!important;color:#e2e8f0!important;border-color:#334155!important;}' +
         'body.dark-mode .edu-soft-card{background:#1e293b!important;border-color:#334155!important;}' +
         'body.dark-mode .learning-surface{background:#0f172a!important;}' +
@@ -572,18 +606,16 @@
         }
       }
 
-      // Init from storage / OS preference
-      var stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === 'true') {
-        applyMode(true);
-      } else if (stored === null && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        applyMode(true);
-      }
+      // Light by default; dark only after the visitor picks it.
+      try { localStorage.removeItem('nectra-dark-mode'); } catch (e) {}
+      var stored = null;
+      try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+      applyMode(stored === 'dark');
 
       btn.addEventListener('click', function () {
         var isDark = !document.body.classList.contains('dark-mode');
         applyMode(isDark);
-        localStorage.setItem(STORAGE_KEY, isDark);
+        try { localStorage.setItem(STORAGE_KEY, isDark ? 'dark' : 'light'); } catch (e) {}
       });
     })();
 
