@@ -56,12 +56,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!$result['ok']) {
             $error = $result['message'];
         } else {
-            $stmt = $pdo->prepare("UPDATE students SET email_verified = 1, email_verified_at = NOW() WHERE email = :email");
+            $stmt = $pdo->prepare("UPDATE students SET email_verified = 1, email_verified_at = NOW() WHERE email = :email AND email_verified = 0");
             $stmt->execute(['email' => $email]);
+            $newlyVerified = $stmt->rowCount() > 0;
             $stmtStudent = $pdo->prepare("SELECT id, name FROM students WHERE email = :email LIMIT 1");
             $stmtStudent->execute(['email' => $email]);
             $student = $stmtStudent->fetch();
             if ($student) {
+                if ($newlyVerified) {
+                    $welcomeName = (string)$student['name'];
+                    defer_after_response(static fn() => send_welcome_mail($email, $welcomeName));
+                }
                 session_regenerate_id(true);
                 $_SESSION['student_logged_in'] = true;
                 $_SESSION['student_id'] = $student['id'];
@@ -86,6 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("UPDATE students SET password = :password, email_verified = 1, email_verified_at = COALESCE(email_verified_at, NOW()) WHERE email = :email");
                 $stmt->execute(['password' => password_hash($newPassword, PASSWORD_DEFAULT), 'email' => $email]);
                 unset($_SESSION['pending_reset_email']);
+                defer_after_response(static fn() => send_password_changed_mail($email));
                 $success = 'Password updated. You can now log in.';
                 $step = 'done';
             }

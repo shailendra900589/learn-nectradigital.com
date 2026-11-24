@@ -23,6 +23,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $price = max(0, (float)($_POST['price'] ?? 0));
         $currency = strtoupper(substr(preg_replace('/[^A-Z]/i', '', $_POST['currency'] ?? 'INR'), 0, 8)) ?: 'INR';
         $duration = max(1, post_int('duration_days', 30));
+        $courseLimitRaw = trim((string)($_POST['course_limit'] ?? ''));
+        $courseLimit = $courseLimitRaw === '' ? null : max(1, (int)$courseLimitRaw);
+        $offerPriceRaw = trim((string)($_POST['offer_price'] ?? ''));
+        $offerPrice = $offerPriceRaw === '' ? null : max(0, (float)$offerPriceRaw);
+        $offerLabel = substr(trim((string)($_POST['offer_label'] ?? '')), 0, 80) ?: null;
+        $offerEndsRaw = trim((string)($_POST['offer_ends_at'] ?? ''));
+        $offerEndsAt = preg_match('/^\d{4}-\d{2}-\d{2}$/', $offerEndsRaw) ? $offerEndsRaw . ' 23:59:59' : null;
         $description = substr(trim($_POST['description'] ?? ''), 0, 1200);
         $features = substr(trim($_POST['features'] ?? ''), 0, 1600);
 
@@ -33,7 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($planId > 0) {
                     $stmt = $pdo->prepare("
                         UPDATE plans
-                        SET name = :name, slug = :slug, price = :price, currency = :currency, duration_days = :duration_days,
+                        SET name = :name, slug = :slug, price = :price, offer_price = :offer_price, offer_label = :offer_label, offer_ends_at = :offer_ends_at,
+                            currency = :currency, duration_days = :duration_days, course_limit = :course_limit,
                             description = :description, features = :features, ad_free = :ad_free, priority_support = :priority_support,
                             downloadable_resources = :downloadable_resources, certificate_access = :certificate_access, is_active = :is_active
                         WHERE id = :id
@@ -44,6 +52,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'price' => $price,
                         'currency' => $currency,
                         'duration_days' => $duration,
+                        'course_limit' => $courseLimit,
+                        'offer_price' => $offerPrice,
+                        'offer_label' => $offerLabel,
+                        'offer_ends_at' => $offerEndsAt,
                         'description' => $description,
                         'features' => $features,
                         'ad_free' => isset($_POST['ad_free']) ? 1 : 0,
@@ -56,8 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $success = 'Plan updated.';
                 } else {
                     $stmt = $pdo->prepare("
-                        INSERT INTO plans (name, slug, price, currency, duration_days, description, features, ad_free, priority_support, downloadable_resources, certificate_access, is_active)
-                        VALUES (:name, :slug, :price, :currency, :duration_days, :description, :features, :ad_free, :priority_support, :downloadable_resources, :certificate_access, :is_active)
+                        INSERT INTO plans (name, slug, price, offer_price, offer_label, offer_ends_at, currency, duration_days, course_limit, description, features, ad_free, priority_support, downloadable_resources, certificate_access, is_active)
+                        VALUES (:name, :slug, :price, :offer_price, :offer_label, :offer_ends_at, :currency, :duration_days, :course_limit, :description, :features, :ad_free, :priority_support, :downloadable_resources, :certificate_access, :is_active)
                     ");
                     $stmt->execute([
                         'name' => $name,
@@ -65,6 +77,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'price' => $price,
                         'currency' => $currency,
                         'duration_days' => $duration,
+                        'course_limit' => $courseLimit,
+                        'offer_price' => $offerPrice,
+                        'offer_label' => $offerLabel,
+                        'offer_ends_at' => $offerEndsAt,
                         'description' => $description,
                         'features' => $features,
                         'ad_free' => isset($_POST['ad_free']) ? 1 : 0,
@@ -110,22 +126,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmtPlan->execute(['id' => $planId]);
             $plan = $stmtPlan->fetch();
             if ($plan) {
-                $endsAt = date('Y-m-d H:i:s', time() + ((int)$plan['duration_days'] * 86400));
-                $pdo->prepare("UPDATE student_subscriptions SET status = 'cancelled', updated_at = NOW() WHERE student_id = :student_id AND status = 'active'")
-                    ->execute(['student_id' => $studentId]);
-                $stmtSub = $pdo->prepare("
-                    INSERT INTO student_subscriptions (student_id, plan_id, status, starts_at, ends_at, admin_note, updated_at)
-                    VALUES (:student_id, :plan_id, 'active', NOW(), :ends_at, :admin_note, NOW())
-                ");
-                $stmtSub->execute([
-                    'student_id' => $studentId,
-                    'plan_id' => $planId,
-                    'ends_at' => $endsAt,
-                    'admin_note' => substr(trim($_POST['admin_note'] ?? ''), 0, 1000),
-                ]);
+                $courseIds = array_map('intval', (array)($_POST['course_ids'] ?? []));
+                $grantedId = activate_plan_for_student($pdo, $studentId, $plan, 'Admin: ' . trim((string)($_POST['admin_note'] ?? '')), $courseIds);
+                defer_after_response(static fn() => send_package_mail($pdo, $studentId, $grantedId));
             }
         }
         $success = 'Student access updated.';
+    }
+
+    if ($action === 'cancel_subscription') {
+        $pdo->prepare("UPDATE student_subscriptions SET status = 'cancelled', updated_at = NOW() WHERE id = :id AND status = 'active'")
+            ->execute(['id' => post_int('subscription_id')]);
+        $success = 'Package cancelled.';
     }
 
     if ($action === 'payment_status') {
@@ -136,26 +148,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmtPayment->execute(['id' => $paymentId]);
         $payment = $stmtPayment->fetch();
         if ($payment) {
+            $alreadyApproved = $payment['status'] === 'approved';
             $pdo->prepare("UPDATE payments SET status = :status, admin_note = :note WHERE id = :id")->execute(['status' => $status, 'note' => $note, 'id' => $paymentId]);
-            if ($status === 'approved' && (int)$payment['plan_id'] > 0) {
+            if ($status === 'approved' && !$alreadyApproved && (int)$payment['plan_id'] > 0) {
                 $stmtPlan = $pdo->prepare("SELECT * FROM plans WHERE id = :id LIMIT 1");
                 $stmtPlan->execute(['id' => $payment['plan_id']]);
                 $plan = $stmtPlan->fetch();
-                if ($plan && plans_enabled($pdo)) {
-                    $endsAt = date('Y-m-d H:i:s', time() + ((int)$plan['duration_days'] * 86400));
-                    $pdo->prepare("UPDATE student_subscriptions SET status = 'cancelled', updated_at = NOW() WHERE student_id = :student_id AND status = 'active'")
-                        ->execute(['student_id' => $payment['student_id']]);
-                    $stmtSub = $pdo->prepare("
-                        INSERT INTO student_subscriptions (student_id, plan_id, status, starts_at, ends_at, admin_note, updated_at)
-                        VALUES (:student_id, :plan_id, 'active', NOW(), :ends_at, :admin_note, NOW())
-                    ");
-                    $stmtSub->execute([
-                        'student_id' => $payment['student_id'],
-                        'plan_id' => $payment['plan_id'],
-                        'ends_at' => $endsAt,
-                        'admin_note' => 'Activated from payment #' . $paymentId,
-                    ]);
+                if ($plan) {
+                    $subscriptionId = activate_plan_for_student($pdo, (int)$payment['student_id'], $plan, 'Activated from payment #' . $paymentId, $payment['course_id'] ? [(int)$payment['course_id']] : []);
+                    $pdo->prepare("UPDATE payments SET subscription_id = :sid WHERE id = :id")->execute(['sid' => $subscriptionId, 'id' => $paymentId]);
+                    $buyerId = (int)$payment['student_id'];
+                    defer_after_response(static fn() => send_package_mail($pdo, $buyerId, $subscriptionId));
                 }
+            }
+            if (in_array($status, ['rejected', 'refunded'], true) && (int)$payment['subscription_id'] > 0) {
+                $pdo->prepare("UPDATE student_subscriptions SET status = 'cancelled', updated_at = NOW() WHERE id = :id")
+                    ->execute(['id' => $payment['subscription_id']]);
             }
             $success = 'Payment updated.';
         }
@@ -189,10 +197,19 @@ $payments = $pdo->query("
     FROM payments pay
     LEFT JOIN students s ON s.id = pay.student_id
     LEFT JOIN plans p ON p.id = pay.plan_id
+    WHERE NOT (pay.method = 'razorpay' AND pay.status = 'requested')
     ORDER BY FIELD(pay.status, 'paid', 'requested', 'approved', 'rejected', 'refunded'), pay.created_at DESC
     LIMIT 80
 ")->fetchAll();
-$planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.00', 'currency' => 'INR', 'duration_days' => 30, 'description' => '', 'features' => '', 'ad_free' => 1, 'priority_support' => 0, 'downloadable_resources' => 0, 'certificate_access' => 0, 'is_active' => 1];
+$allCourses = $pdo->query("SELECT id, title FROM courses ORDER BY title ASC")->fetchAll();
+$studentPackages = [];
+foreach ($students as $student) {
+    foreach (active_subscriptions($pdo, (int)$student['id']) as $package) {
+        $package['courses'] = $package['course_limit'] === null ? [] : subscription_courses($pdo, (int)$package['id']);
+        $studentPackages[(int)$student['id']][] = $package;
+    }
+}
+$planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.00', 'currency' => 'INR', 'duration_days' => 365, 'course_limit' => null, 'description' => '', 'features' => '', 'ad_free' => 1, 'priority_support' => 0, 'downloadable_resources' => 0, 'certificate_access' => 0, 'is_active' => 1];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -261,6 +278,18 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                         <label class="admin-field"><span>Duration in days</span>
                             <input name="duration_days" value="<?php echo (int)$planForm['duration_days']; ?>" type="number" min="1" class="admin-input">
                         </label>
+                        <label class="admin-field"><span>Courses included (blank = all courses)</span>
+                            <input name="course_limit" value="<?php echo $planForm['course_limit'] === null ? '' : (int)$planForm['course_limit']; ?>" type="number" min="1" placeholder="All" class="admin-input">
+                        </label>
+                        <label class="admin-field"><span>Offer price (blank = no offer)</span>
+                            <input name="offer_price" value="<?php echo ($planForm['offer_price'] ?? null) === null ? '' : h((string)$planForm['offer_price']); ?>" type="number" step="0.01" min="0" placeholder="e.g. 149" class="admin-input">
+                        </label>
+                        <label class="admin-field"><span>Offer label</span>
+                            <input name="offer_label" value="<?php echo h((string)($planForm['offer_label'] ?? '')); ?>" maxlength="80" placeholder="Diwali offer" class="admin-input">
+                        </label>
+                        <label class="admin-field"><span>Offer ends on (blank = no end date)</span>
+                            <input name="offer_ends_at" value="<?php echo !empty($planForm['offer_ends_at']) ? h(date('Y-m-d', strtotime((string)$planForm['offer_ends_at']))) : ''; ?>" type="date" class="admin-input">
+                        </label>
                         <label class="admin-field admin-field-full"><span>Description</span>
                             <textarea name="description" rows="2" placeholder="Description" class="admin-input"><?php echo h($planForm['description']); ?></textarea>
                         </label>
@@ -292,7 +321,7 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                             <?php foreach($plans as $plan): ?>
                                 <tr>
                                     <td class="p-4"><div class="font-black"><?php echo h($plan['name']); ?></div><div class="text-xs text-slate-500"><?php echo h($plan['slug']); ?> - <?php echo $plan['is_active'] ? 'Active' : 'Off'; ?></div></td>
-                                    <td class="p-4 font-bold"><?php echo h($plan['currency']); ?> <?php echo number_format((float)$plan['price'], 2); ?></td>
+                                    <td class="p-4 font-bold"><?php echo h($plan['currency']); ?> <?php echo number_format((float)$plan['price'], 2); ?><?php if (plan_offer_active($plan)): ?> <span class="text-rose-600">&rarr; <?php echo number_format(plan_effective_price($plan), 2); ?> offer</span><?php endif; ?><div class="text-xs text-slate-500 font-normal"><?php echo $plan['course_limit'] === null ? 'All courses' : (int)$plan['course_limit'] . ' course(s)'; ?> &middot; <?php echo (int)$plan['duration_days']; ?> days</div></td>
                                     <td class="p-4 text-slate-600"><?php echo h(implode(', ', array_slice(plan_features($plan['features']), 0, 3))); ?></td>
                                     <td class="p-4 text-right"><a href="students?edit_plan=<?php echo (int)$plan['id']; ?>" class="text-blue-600 font-bold">Edit</a></td>
                                 </tr>
@@ -317,13 +346,32 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                                             <div class="text-xs text-slate-500"><?php echo h($student['email']); ?></div>
                                             <a href="../profile/<?php echo h($student['public_token'] ?? ''); ?>" target="_blank" class="text-xs text-blue-600 font-bold">Public profile</a>
                                         </td>
-                                        <td class="p-4 align-top">
-                                            <div class="font-bold"><?php echo h($student['plan_name'] ?: 'Free'); ?></div>
-                                            <div class="text-xs text-slate-500"><?php echo $student['ends_at'] ? h(date('M j, Y', strtotime($student['ends_at']))) : 'No expiry'; ?></div>
+                                        <td class="p-4 align-top min-w-[220px]">
+                                            <?php if (empty($studentPackages[(int)$student['id']])): ?>
+                                                <div class="font-bold">Free</div>
+                                            <?php endif; ?>
+                                            <?php foreach ($studentPackages[(int)$student['id']] ?? [] as $package): ?>
+                                                <div class="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2">
+                                                    <div class="font-bold"><?php echo h($package['plan_name'] ?: 'Package'); ?></div>
+                                                    <div class="text-xs text-slate-500">Until <?php echo $package['ends_at'] ? h(date('M j, Y', strtotime($package['ends_at']))) : 'no expiry'; ?></div>
+                                                    <div class="text-xs text-slate-600 mt-1">
+                                                        <?php if ($package['course_limit'] === null): ?>All courses<?php else: ?>
+                                                            <?php echo (int)$package['courses_used']; ?>/<?php echo (int)$package['course_limit']; ?>:
+                                                            <?php echo h(implode(', ', array_column($package['courses'], 'title')) ?: 'none chosen yet'); ?>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <form method="POST" action="students" class="mt-1" onsubmit="return confirm('Cancel this package?');">
+                                                        <?php echo csrf_field(); ?>
+                                                        <input type="hidden" name="action" value="cancel_subscription">
+                                                        <input type="hidden" name="subscription_id" value="<?php echo (int)$package['id']; ?>">
+                                                        <button class="text-xs font-bold text-red-600 hover:underline">Cancel package</button>
+                                                    </form>
+                                                </div>
+                                            <?php endforeach; ?>
                                         </td>
                                         <td class="p-4 align-top">
                                             <div class="grid grid-cols-2 gap-2 text-xs font-bold">
-                                                <?php foreach(['content_access' => 'Content', 'profile_public' => 'Profile', 'public_email' => 'Email public', 'public_phone' => 'Phone public', 'hide_ads_override' => 'No ads'] as $field => $label): ?>
+                                                <?php foreach(['content_access' => 'Content', 'profile_public' => 'Profile', 'public_email' => 'Email public', 'public_phone' => 'Phone public', 'hide_ads_override' => 'Ad-free (manual)'] as $field => $label): ?>
                                                     <label class="flex items-center gap-2"><input form="student-form-<?php echo (int)$student['id']; ?>" type="checkbox" name="<?php echo h($field); ?>" <?php echo (int)($student[$field] ?? 0) === 1 ? 'checked' : ''; ?>> <?php echo h($label); ?></label>
                                                 <?php endforeach; ?>
                                             </div>
@@ -338,6 +386,12 @@ $planForm = $editPlan ?: ['id' => 0, 'name' => '', 'slug' => '', 'price' => '0.0
                                                     <option value="<?php echo (int)$plan['id']; ?>"><?php echo h($plan['name']); ?></option>
                                                 <?php endforeach; ?>
                                             </select>
+                                            <select form="student-form-<?php echo (int)$student['id']; ?>" aria-label="Courses for the package" name="course_ids[]" multiple size="4" class="mt-2 border border-gray-300 rounded-lg px-2 py-1 text-xs w-full">
+                                                <?php foreach ($allCourses as $courseOption): ?>
+                                                    <option value="<?php echo (int)$courseOption['id']; ?>"><?php echo h($courseOption['title']); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <p class="text-[11px] text-slate-500 mt-1">For course packs: Ctrl+click to pick courses. Ignored for All Access.</p>
                                             <label class="mt-2 flex items-center gap-2 text-xs font-bold"><input form="student-form-<?php echo (int)$student['id']; ?>" type="checkbox" name="activate_plan" <?php echo plans_enabled($pdo) ? '' : 'disabled'; ?>> Activate selected plan</label>
                                             <input form="student-form-<?php echo (int)$student['id']; ?>" name="admin_note" placeholder="Admin note" class="mt-2 border border-gray-300 rounded-lg px-3 py-2 text-xs w-full">
                                         </td>

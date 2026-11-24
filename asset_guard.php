@@ -190,12 +190,13 @@ if ($isChapterDownload || str_starts_with($relAssetPath, 'assets/uploads/student
     secure_session_start();
     $studentId = (int)($_SESSION['student_id'] ?? 0);
     if ($isChapterDownload) {
-        $stmt = $pdo->prepare('SELECT MIN(is_premium) FROM chapters WHERE download_file = ?');
+        $stmt = $pdo->prepare('SELECT MIN(is_premium) AS premium, MIN(course_id) AS course_id FROM chapters WHERE download_file = ?');
         $stmt->execute([$relAssetPath]);
-        $premium = $stmt->fetchColumn();
-        if ($premium === null || $premium === false
+        $download = $stmt->fetch() ?: [];
+        $premium = $download['premium'] ?? null;
+        if ($premium === null
             || ($studentId > 0 && !student_can_view_content($pdo, $studentId))
-            || ((int)$premium === 1 && ($studentId <= 0 || !active_subscription($pdo, $studentId)))) {
+            || ((int)$premium === 1 && ($studentId <= 0 || !student_course_access($pdo, $studentId, (int)$download['course_id'])))) {
             deny_asset_access();
         }
     } else {

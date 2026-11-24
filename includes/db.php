@@ -5,6 +5,9 @@ require_once __DIR__ . '/i18n.php';
 require_once __DIR__ . '/translate.php';
 require_once __DIR__ . '/profile_helpers.php';
 require_once __DIR__ . '/subscriptions.php';
+require_once __DIR__ . '/razorpay.php';
+require_once __DIR__ . '/mailer.php';
+require_once __DIR__ . '/email_marketing.php';
 require_once __DIR__ . '/course_rank.php';
 
 /*
@@ -66,4 +69,5 @@ try {
 
 ensure_subscription_schema($pdo);
 ensure_course_rank_schema($pdo);
+register_shutdown_function('email_queue_tick', $pdo);
 ?>

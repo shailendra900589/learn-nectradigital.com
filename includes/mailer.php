@@ -3,17 +3,131 @@ declare(strict_types=1);
 
 function smtp_config(): array
 {
-    $fromEmail = getenv('SMTP_FROM_EMAIL') ?: (getenv('SMTP_USER') ?: 'nectradigital3@gmail.com');
+    $username = app_secret('SMTP_USER') ?: 'nectradigital3@gmail.com';
+    $fromEmail = app_secret('SMTP_FROM_EMAIL') ?: $username;
     return [
-        'host' => getenv('SMTP_HOST') ?: 'smtp.gmail.com',
-        'port' => (int)(getenv('SMTP_PORT') ?: 587),
-        'username' => getenv('SMTP_USER') ?: 'nectradigital3@gmail.com',
-        'password' => getenv('SMTP_PASS') ?: '',
+        'host' => app_secret('SMTP_HOST') ?: 'smtp.gmail.com',
+        'port' => (int)(app_secret('SMTP_PORT') ?: 587),
+        'username' => $username,
+        'password' => app_secret('SMTP_PASS'),
         'from_email' => $fromEmail,
-        'from_name' => getenv('SMTP_FROM_NAME') ?: 'Nectra Digital',
-        'reply_to' => getenv('SMTP_REPLY_TO') ?: $fromEmail,
-        'helo_domain' => getenv('SMTP_HELO_DOMAIN') ?: 'nectradigital.com',
+        'from_name' => app_secret('SMTP_FROM_NAME') ?: 'Learn.Nectra',
+        'reply_to' => app_secret('SMTP_REPLY_TO') ?: $fromEmail,
+        'helo_domain' => app_secret('SMTP_HELO_DOMAIN') ?: 'nectradigital.com',
     ];
+}
+
+function email_layout(string $heading, string $bodyHtml, string $ctaText = '', string $ctaUrl = '', string $footerHtml = ''): string
+{
+    $site = rtrim(site_base_url(), '/');
+    $button = '';
+    if ($ctaText !== '' && preg_match('#^https?://#i', $ctaUrl)) {
+        $button = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 8px"><tr><td style="border-radius:8px;background:#04AA6D"><a href="' . h($ctaUrl) . '" style="display:inline-block;padding:13px 26px;font-weight:700;font-size:15px;color:#ffffff;text-decoration:none">' . h($ctaText) . '</a></td></tr></table>';
+    }
+    return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . h($heading) . '</title></head>'
+        . '<body style="margin:0;padding:0;background:#f1f5f9;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1e293b">'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:28px 12px"><tr><td align="center">'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0">'
+        . '<tr><td style="background:#0f172a;padding:22px 32px"><a href="' . h($site) . '" style="color:#ffffff;text-decoration:none;font-size:22px;font-weight:800">Learn<span style="color:#34d399">.Nectra</span></a></td></tr>'
+        . '<tr><td style="padding:32px 32px 28px"><h1 style="margin:0 0 16px;font-size:24px;line-height:1.3;color:#0f172a">' . h($heading) . '</h1>'
+        . '<div style="font-size:15px;line-height:1.7;color:#334155">' . $bodyHtml . '</div>' . $button . '</td></tr>'
+        . '<tr><td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:18px 32px;font-size:12px;line-height:1.6;color:#64748b">'
+        . 'Learn.Nectra by Nectra Digital &middot; <a href="' . h($site) . '" style="color:#059669">learning.nectradigital.com</a>'
+        . ($footerHtml !== '' ? '<br>' . $footerHtml : '')
+        . '</td></tr></table></td></tr></table></body></html>';
+}
+
+function email_paragraphs(string $text): string
+{
+    $html = '';
+    foreach (preg_split('/\R{2,}/', trim($text)) as $paragraph) {
+        if (trim($paragraph) !== '') {
+            $html .= '<p style="margin:0 0 14px">' . nl2br(h(trim($paragraph))) . '</p>';
+        }
+    }
+    return $html;
+}
+
+function send_branded_mail(string $to, string $subject, string $heading, string $bodyText, string $ctaText = '', string $ctaUrl = '', string $footerHtml = ''): bool
+{
+    $html = email_layout($heading, email_paragraphs($bodyText), $ctaText, $ctaUrl, $footerHtml);
+    $text = $heading . "\n\n" . trim($bodyText) . ($ctaText !== '' && $ctaUrl !== '' ? "\n\n" . $ctaText . ': ' . $ctaUrl : '');
+    return send_smtp_mail($to, $subject, $html, $text);
+}
+
+function defer_after_response(callable $task): void
+{
+    register_shutdown_function(static function () use ($task): void {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        if (function_exists('litespeed_finish_request')) {
+            litespeed_finish_request();
+        } elseif (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        }
+        ignore_user_abort(true);
+        try {
+            $task();
+        } catch (Throwable $e) {
+            error_log('Deferred task failed: ' . $e->getMessage());
+        }
+    });
+}
+
+function send_password_changed_mail(string $email): bool
+{
+    return send_branded_mail(
+        $email,
+        'Your Learn.Nectra password was changed',
+        'Password changed',
+        "The password for your Learn.Nectra account was just changed.\n\nIf this was you, no action is needed. If you did not change it, reset your password right away and contact support.",
+        'Sign in',
+        rtrim(site_base_url(), '/') . '/login'
+    );
+}
+
+function send_welcome_mail(string $email, string $name): bool
+{
+    $first = trim(explode(' ', trim($name))[0] ?? '') ?: 'there';
+    return send_branded_mail(
+        $email,
+        'Welcome to Learn.Nectra',
+        'Welcome, ' . $first . '!',
+        "Your Learn.Nectra account is ready.\n\nEvery lesson is free to read. Pick a course, track your progress, pass the chapter quizzes, and earn your certificate.\n\nWant an ad-free experience with downloads and certificates? Packages start at Rs 199 for a full year.",
+        'Start learning',
+        site_base_url()
+    );
+}
+
+function send_package_mail(PDO $pdo, int $studentId, int $subscriptionId): bool
+{
+    $stmt = $pdo->prepare("
+        SELECT s.email, s.name, p.name AS plan_name, p.course_limit, ss.ends_at
+        FROM student_subscriptions ss
+        JOIN students s ON s.id = ss.student_id
+        LEFT JOIN plans p ON p.id = ss.plan_id
+        WHERE ss.id = :id AND ss.student_id = :student_id
+        LIMIT 1
+    ");
+    $stmt->execute(['id' => $subscriptionId, 'student_id' => $studentId]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return false;
+    }
+    $first = trim(explode(' ', trim((string)$row['name']))[0] ?? '') ?: 'there';
+    $valid = $row['ends_at'] ? date('j M Y', strtotime((string)$row['ends_at'])) : 'no expiry';
+    $scope = $row['course_limit'] === null
+        ? 'Every course on Learn.Nectra is now ad-free for you, with downloads and certificates.'
+        : 'You can use it on ' . (int)$row['course_limit'] . ' course' . ((int)$row['course_limit'] === 1 ? '' : 's') . '. Choose or review your courses on the Plans page.';
+    return send_branded_mail(
+        (string)$row['email'],
+        'Your ' . $row['plan_name'] . ' package is active',
+        'Your package is active',
+        "Hi {$first},\n\nYour {$row['plan_name']} package is now active and valid until {$valid}.\n\n{$scope}\n\nThank you for learning with us.",
+        'Open my packages',
+        rtrim(site_base_url(), '/') . '/billing'
+    );
 }
 
 function smtp_read($socket): string
@@ -39,7 +153,7 @@ function smtp_command($socket, string $command, array $okCodes): string
     return $response;
 }
 
-function send_smtp_mail(string $to, string $subject, string $html, string $text = ''): bool
+function send_smtp_mail(string $to, string $subject, string $html, string $text = '', array $extraHeaders = []): bool
 {
     $config = smtp_config();
     if ($config['password'] === '') {
@@ -90,8 +204,10 @@ function send_smtp_mail(string $to, string $subject, string $html, string $text 
             'Message-ID: <' . bin2hex(random_bytes(16)) . '@' . $config['helo_domain'] . '>',
             'MIME-Version: 1.0',
             'Content-Type: multipart/alternative; boundary="' . $boundary . '"',
-            'X-Mailer: PHP/' . PHP_VERSION,
         ];
+        foreach ($extraHeaders as $header) {
+            $headers[] = str_replace(["\r", "\n"], '', (string)$header);
+        }
         $text = $text !== '' ? $text : strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $html));
         $body = implode("\r\n", $headers) . "\r\n\r\n";
         $body .= '--' . $boundary . "\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" . $text . "\r\n";

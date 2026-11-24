@@ -99,6 +99,7 @@ if ($google_enabled && isset($_GET['code'])) {
                 $random_password = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
                 $stmt = $pdo->prepare("INSERT INTO students (name, email, password, email_verified, email_verified_at, profile_public) VALUES (:name, :email, :password, 1, NOW(), 0)");
                 $stmt->execute(['name' => $name, 'email' => $email, 'password' => $random_password]);
+                defer_after_response(static fn() => send_welcome_mail($email, $name));
                 
                 session_regenerate_id(true);
                 $_SESSION['student_logged_in'] = true;

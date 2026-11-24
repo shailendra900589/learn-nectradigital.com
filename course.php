@@ -2,9 +2,9 @@
 require_once 'includes/db.php';
 secure_session_start();
 
-function require_lesson_access(PDO $pdo, int $studentId, bool $premium): void
+function require_lesson_access(PDO $pdo, int $studentId, bool $premium, int $courseId): void
 {
-    if (!student_can_view_content($pdo, $studentId) || ($premium && !active_subscription($pdo, $studentId))) {
+    if (!student_can_view_content($pdo, $studentId) || ($premium && !student_course_access($pdo, $studentId, $courseId))) {
         json_response(['status' => 'error', 'message' => 'Your account does not have access to this lesson.'], 403);
     }
 }
@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         if (!$chapterCheck) {
             json_response(['status' => 'error', 'message' => 'Invalid chapter selection.'], 400);
         }
-        require_lesson_access($pdo, (int)$student_id, (bool)$chapterCheck['is_premium']);
+        require_lesson_access($pdo, (int)$student_id, (bool)$chapterCheck['is_premium'], (int)$course_id);
         $quiz = json_decode((string)($chapterCheck['quiz_json'] ?? ''), true);
         if ((int)($chapterCheck['require_quiz_pass'] ?? 1) === 1 && is_array($quiz) && count($quiz) > 0) {
             $stmtPassed = $pdo->prepare("SELECT id FROM student_quiz_attempts WHERE student_id = ? AND chapter_id = ? AND passed = 1 LIMIT 1");
@@ -75,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
     if (!$quizChapter) {
         json_response(['status' => 'error', 'message' => 'Invalid chapter selection.'], 400);
     }
-    require_lesson_access($pdo, $student_id, (bool)$quizChapter['is_premium']);
+    require_lesson_access($pdo, $student_id, (bool)$quizChapter['is_premium'], $course_id);
     $quiz = json_decode((string)$quizChapter['quiz_json'], true);
     if (!is_array($quiz) || !$quiz) {
         json_response(['status' => 'error', 'message' => 'No quiz is available for this chapter.'], 400);
@@ -161,7 +161,8 @@ if (isset($_GET['ajax_chapter_id'])) {
             echo '<div class="p-8 bg-amber-50 text-amber-800 rounded-xl border border-amber-100 font-medium">' . h(t('course.paused')) . '</div>';
             exit;
         }
-        $activeSubscription = isset($_SESSION['student_logged_in']) ? active_subscription($pdo, (int)$_SESSION['student_id']) : null;
+        ads_course_context((int)$course_id);
+        $activeSubscription = isset($_SESSION['student_logged_in']) && student_course_access($pdo, (int)$_SESSION['student_id'], (int)$course_id);
         if ((int)($chapter['is_premium'] ?? 0) === 1 && !$activeSubscription) {
             echo '<div class="p-8 bg-blue-50 text-blue-900 rounded-xl border border-blue-100 font-medium"><h2 class="text-2xl font-black mb-2">' . h(t('course.premium_title')) . '</h2><p>' . h(t('course.premium_body')) . '</p><a href="' . h(lang_href('billing')) . '" class="inline-block mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-lg">' . h(t('course.view_plans')) . '</a></div>';
             exit;
@@ -402,6 +403,19 @@ if (
     }
 }
 
+ads_course_context((int)$course['id']);
+$packageState = 'guest';
+if (isset($_SESSION['student_logged_in'])) {
+    $packageStudentId = (int)$_SESSION['student_id'];
+    if (student_course_access($pdo, $packageStudentId, (int)$course['id'])) {
+        $packageState = 'owned';
+    } elseif (student_free_course_slots($pdo, $packageStudentId) > 0) {
+        $packageState = 'slot';
+    } else {
+        $packageState = 'buy';
+    }
+}
+
 $completed_chapters = [];
 $progress_percentage = 0;
 if (isset($_SESSION['student_logged_in'])) {
@@ -492,6 +506,9 @@ $translationBag = [
     'Lookup',
     'Chart',
     'Pivot',
+    'Ad-free in your package',
+    'Add to my package',
+    'Go ad-free from Rs 199',
 ];
 foreach ($chapters as $chap) {
     $translationBag[] = (string)$chap['chapter_name'];
@@ -681,6 +698,19 @@ require_once 'includes/header.php';
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
                 <span><?php echo h(t('course.share')); ?></span>
             </button>
+            <?php if ($packageState === 'owned'): ?>
+                <span class="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1 rounded-md">&check; <?php echo h(localize_text('Ad-free in your package')); ?></span>
+            <?php elseif ($packageState === 'slot'): ?>
+                <form method="POST" action="<?php echo h(lang_href('billing')); ?>" class="m-0">
+                    <?php echo csrf_field(); ?>
+                    <input type="hidden" name="action" value="claim_course">
+                    <input type="hidden" name="course_id" value="<?php echo (int)$course['id']; ?>">
+                    <input type="hidden" name="return" value="<?php echo h(course_path($course['slug'])); ?>">
+                    <button class="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md"><?php echo h(localize_text('Add to my package')); ?></button>
+                </form>
+            <?php else: ?>
+                <a href="<?php echo h(lang_href($packageState === 'guest' ? 'login' : 'billing?course=' . (int)$course['id'])); ?>" class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 hover:bg-amber-100 px-3 py-1 rounded-md border border-amber-200"><?php echo h(localize_text('Go ad-free from Rs 199')); ?></a>
+            <?php endif; ?>
         </div>
     </div>
 </div>
