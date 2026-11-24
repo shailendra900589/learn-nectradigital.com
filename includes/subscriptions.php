@@ -144,12 +144,17 @@ function ensure_subscription_schema(PDO $pdo): void
             'download_label' => "ALTER TABLE chapters ADD COLUMN download_label VARCHAR(160) NULL AFTER download_file",
             'is_premium' => "ALTER TABLE chapters ADD COLUMN is_premium TINYINT(1) NOT NULL DEFAULT 0 AFTER download_label",
             'require_quiz_pass' => "ALTER TABLE chapters ADD COLUMN require_quiz_pass TINYINT(1) NOT NULL DEFAULT 1 AFTER is_premium",
+            'keywords' => "ALTER TABLE chapters ADD COLUMN keywords VARCHAR(500) NULL AFTER content",
         ];
         foreach ($chapterColumns as $column => $sql) {
             if (!$columnExists('chapters', $column)) {
                 $pdo->exec($sql);
             }
         }
+    }
+
+    if ($tableExists('courses') && !$columnExists('courses', 'keywords')) {
+        $pdo->exec("ALTER TABLE courses ADD COLUMN keywords VARCHAR(500) NULL AFTER description");
     }
 
     if ($tableExists('student_progress')) {
