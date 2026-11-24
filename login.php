@@ -126,7 +126,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $email = filter_var(trim($_POST['email'] ?? ''), FILTER_VALIDATE_EMAIL);
     $password = $_POST['password'] ?? '';
 
-    if ($action == 'login') {
+    $loginName = trim((string)($_POST['email'] ?? ''));
+    if ($action == 'login' && !$email && $password !== '' && preg_match('/^[a-zA-Z0-9_.-]{3,40}$/', $loginName)) {
+        enforce_request_budget('admin-login', 12, 900);
+        $stmtAdmin = $pdo->prepare("SELECT id, username, password FROM users WHERE username = :username LIMIT 1");
+        $stmtAdmin->execute(['username' => $loginName]);
+        $adminUser = $stmtAdmin->fetch();
+        if ($adminUser && password_verify($password, $adminUser['password'])) {
+            session_regenerate_id(true);
+            $_SESSION['admin_logged_in'] = true;
+            $_SESSION['admin_id'] = $adminUser['id'];
+            $_SESSION['admin_username'] = $adminUser['username'];
+            redirect(app_path('admin/index'));
+        }
+        $error = "Invalid email or password.";
+    } elseif ($action == 'login') {
         if (!$email || $password === '') {
             $error = "Please enter a valid email and password.";
         } else {
@@ -289,7 +303,7 @@ require_once 'includes/header.php';
                     <input type="hidden" name="action" value="login">
                     <div>
                         <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"><?php echo h(t('login.email')); ?></label>
-                        <input type="email" name="email" required autocomplete="email" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition bg-white" placeholder="you@example.com">
+                        <input type="text" inputmode="email" autocapitalize="none" spellcheck="false" name="email" required autocomplete="username" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition bg-white" placeholder="you@example.com">
                     </div>
                     <div>
                         <div class="flex items-center justify-between mb-1.5">
