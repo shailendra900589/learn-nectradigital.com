@@ -14,7 +14,7 @@ function send_security_headers(): void
     header('X-Frame-Options: DENY');
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: strict-origin-when-cross-origin');
-    header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=(), bluetooth=(), interest-cohort=()');
+    header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(self "https://api.razorpay.com"), usb=(), bluetooth=(), interest-cohort=()');
     header('X-Permitted-Cross-Domain-Policies: none');
     header("Content-Security-Policy: base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'");
     if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
